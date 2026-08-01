@@ -17,6 +17,10 @@
 # =============================================================================
 set -euo pipefail
 
+# Ensure Go and user Go bin paths are included in PATH (handles WSL non-login shells)
+export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+
+
 # ---------------------------------------------------------------------------
 # Colours for readable output
 # ---------------------------------------------------------------------------
