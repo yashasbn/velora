@@ -80,6 +80,7 @@ helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 helm repo update argo
 
 kubectl apply -f "$REPO_ROOT/gitops/argocd/install/namespace.yaml"
+kubectl apply -f "$REPO_ROOT/gitops/argocd/install/repo-secret.yaml"
 
 helm upgrade --install argocd argo/argo-cd \
   --namespace "$ARGOCD_NAMESPACE" \

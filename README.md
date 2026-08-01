@@ -99,7 +99,40 @@ To forward all platform services, run:
 ```
 
 Access URLs:
-- **ArgoCD**: [http://localhost:8080](http://localhost:8080) (admin / auto-generated password)
-- **Airflow**: [http://localhost:8081](http://localhost:8081)
-- **MinIO**: [http://localhost:9001](http://localhost:9001) (velora / velora-minio-secret)
-- **Grafana**: [http://localhost:3000](http://localhost:3000)
+- **ArgoCD**: [http://localhost:30080](http://localhost:30080) (admin / auto-generated password printed by bootstrap.sh)
+- **Airflow**: [http://localhost:30081](http://localhost:30081)
+- **MinIO**: [http://localhost:30090](http://localhost:30090) (velora / velora-minio-secret)
+- **Grafana**: [http://localhost:30300](http://localhost:30300)
+
+---
+
+## Teardown
+
+To stop everything and return to a clean state, run from inside your **WSL2 Ubuntu** shell:
+
+```bash
+export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+
+# Delete the kind cluster (all pods, nodes, namespaces)
+kind delete cluster --name velora
+
+# Remove kubeconfig
+rm -f ~/.kube/velora-config
+
+# Clean up Terraform state
+cd /mnt/c/Projects/velora/infra/terraform
+rm -f terraform.tfstate terraform.tfstate.backup .terraform.lock.hcl
+```
+
+---
+
+## Troubleshooting
+
+Hit an error? See **[docs/troubleshooting.md](docs/troubleshooting.md)** for a full list of known issues and fixes, including:
+
+- `chmod` not recognized (running in PowerShell instead of WSL2)
+- `kind` / `helm` not found in PATH
+- Terraform checksum verification failure
+- Docker permission denied
+- ArgoCD SSL certificate error connecting to GitHub
+- Wrong WSL distribution (`docker-desktop` vs `Ubuntu`)
