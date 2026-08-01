@@ -21,6 +21,14 @@ endif
 build: generate fmt vet
 	go build -o bin/$(BINARY_NAME) ./cmd/manager/
 
+.PHONY: build-summarizer
+build-summarizer: generate fmt vet
+	go build -o bin/velora-summarizer ./cmd/summarizer/
+
+.PHONY: build-all
+build-all: build build-summarizer
+
+
 .PHONY: run
 run: generate fmt vet
 	go run ./cmd/manager/ \
