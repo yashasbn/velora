@@ -1,0 +1,31 @@
+# ArgoCD Application: Velora Operator
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velora-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/YOUR_USERNAME/velora
+    targetRevision: HEAD
+    path: helm/velora-operator
+    helm:
+      releaseName: velora-operator
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velora-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

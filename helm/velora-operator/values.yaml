@@ -1,0 +1,44 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/yashasbn/velora-operator
+  tag: latest
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: velora-operator
+
+# MinIO connection (reads from secret if secretName is set)
+minio:
+  endpoint: "minio.minio.svc.cluster.local:9000"
+  useSSL: false
+  secretName: velora-minio-creds   # Secret keys: access-key, secret-key
+
+# Airflow connection (reads from secret)
+airflow:
+  baseURL: "http://airflow-webserver.airflow.svc.cluster.local:8080"
+  secretName: velora-airflow-creds   # Secret keys: username, password
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+metrics:
+  enabled: true
+  port: 8080
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    interval: 30s
+
+leaderElection:
+  enabled: false   # Enable in multi-replica HA deployments
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

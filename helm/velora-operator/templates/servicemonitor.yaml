@@ -1,0 +1,36 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "velora-operator.fullname" . }}
+  namespace: {{ .Values.metrics.serviceMonitor.namespace }}
+  labels:
+    {{- include "velora-operator.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "velora-operator.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+      path: /metrics
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "velora-operator.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "velora-operator.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "velora-operator.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      protocol: TCP

@@ -1,0 +1,47 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "velora-operator.fullname" . }}
+  labels:
+    {{- include "velora-operator.labels" . | nindent 4 }}
+rules:
+  # DataPipeline resources
+  - apiGroups: ["velora.dev"]
+    resources: ["datapipelines"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["velora.dev"]
+    resources: ["datapipelines/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["velora.dev"]
+    resources: ["datapipelines/finalizers"]
+    verbs: ["update"]
+  # CronJobs
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # ConfigMaps and Secrets
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  # Events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "velora-operator.fullname" . }}
+  labels:
+    {{- include "velora-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "velora-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccount.name }}
+    namespace: {{ .Release.Namespace }}

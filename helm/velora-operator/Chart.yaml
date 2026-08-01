@@ -1,0 +1,15 @@
+apiVersion: v2
+name: velora-operator
+description: Helm chart for the Velora GitOps Data Platform operator
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - velora
+  - operator
+  - datapipeline
+  - gitops
+home: https://github.com/yashasbn/velora
+maintainers:
+  - name: Velora Authors
+    url: https://github.com/yashasbn/velora
