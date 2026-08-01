@@ -1,0 +1,73 @@
+# ArgoCD Helm values for kind local deployment
+# Chart: argo/argo-cd  version ~10.2.2
+#
+# Design decisions:
+# - Server runs in insecure mode (no TLS) so port-forward works without cert issues
+# - Reduced replicas for kind resource constraints
+# - Admin password is set at bootstrap time via bootstrap.sh (argocd-initial-admin-secret)
+
+global:
+  domain: argocd.velora.local
+
+## ArgoCD server
+server:
+  # Disable TLS on the server — we'll terminate at port-forward or ingress later
+  extraArgs:
+    - --insecure
+
+  service:
+    type: NodePort
+    nodePortHttp: 30080
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+## Reduce replicas for local kind cluster
+repoServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+applicationSet:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+controller:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+redis:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+dex:
+  enabled: false   # No SSO needed for local dev
+
+## Notifications (keep off for minimal install)
+notifications:
+  enabled: false
+
+## Config
+configs:
+  params:
+    # Allow syncing to k8s resources the UI shows as out-of-sync without a drift
+    server.insecure: "true"
+  cm:
+    # Don't track CRD status fields to avoid noisy diffs
+    resource.customizations.ignoreDifferences.all: |
+      managedFieldsManagers:
+        - kube-controller-manager

@@ -1,0 +1,35 @@
+# App-of-Apps root Application
+# This single CR, once applied to the cluster, tells ArgoCD to watch
+# gitops/apps/ and auto-sync every sub-application found there.
+#
+# Apply this once manually after bootstrapping ArgoCD:
+#   kubectl apply -f gitops/argocd/apps/velora-app-of-apps.yaml
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velora-apps
+  namespace: argocd
+  # Ensure ArgoCD cleans up child apps when this root app is deleted
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # TODO: Replace with your actual GitHub repo URL before bootstrapping
+    repoURL: https://github.com/YOUR_USERNAME/velora
+    targetRevision: HEAD
+    path: gitops/apps
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true      # Remove resources that are no longer in git
+      selfHeal: true   # Revert manual changes that drift from git
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
