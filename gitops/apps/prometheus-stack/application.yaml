@@ -10,7 +10,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/YOUR_USERNAME/velora
+    repoURL: https://github.com/yashasbn/velora.git
     targetRevision: HEAD
     path: gitops/apps/prometheus-stack
     helm:

@@ -13,7 +13,7 @@
 #
 # Usage:
 #   chmod +x scripts/bootstrap.sh
-#   GITHUB_REPO=https://github.com/YOUR_USERNAME/velora ./scripts/bootstrap.sh
+#   GITHUB_REPO=https://github.com/yashasbn/velora.git ./scripts/bootstrap.sh
 # =============================================================================
 set -euo pipefail
 
@@ -30,7 +30,7 @@ fatal()   { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 # ---------------------------------------------------------------------------
 # Config (override via env vars)
 # ---------------------------------------------------------------------------
-GITHUB_REPO="${GITHUB_REPO:-https://github.com/YOUR_USERNAME/velora}"
+GITHUB_REPO="${GITHUB_REPO:-https://github.com/yashasbn/velora.git}"
 CLUSTER_NAME="${CLUSTER_NAME:-velora}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-$HOME/.kube/velora-config}"
 ARGOCD_NAMESPACE="argocd"
