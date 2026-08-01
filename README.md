@@ -83,7 +83,7 @@ graph TD
 
 ## Setup & Bootstrap (Phase 1)
 
-Ensure you have completed the [WSL2 Ubuntu Prerequisite Setup](.agents/implementation_plan.md) (Docker, Go 1.22+, Terraform, Helm, kubectl, kind, and kubebuilder installed inside WSL2).
+Ensure you have completed the [WSL2 Ubuntu Prerequisite Setup](docs/implementation_plan.md) (Docker, Go 1.22+, Terraform, Helm, kubectl, kind, and kubebuilder installed inside WSL2).
 
 ### 1. Initialize & Start the Platform
 Run the bootstrap script inside your WSL2 environment:
