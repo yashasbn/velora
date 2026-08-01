@@ -35,51 +35,51 @@ Applying this single file handles bucket provisioning, configuration propagation
 
 ## Architecture
 
-```text
-                 Git Push
-                    │
-                    ▼
-              GitHub Repository
-                    │
-                    ▼
-                 ArgoCD Sync
-                    │
-                    ▼
-             Kubernetes API Server
-                    │
-                    ▼
-             DataPipeline CRD
-                    │
-                    ▼
-             Velora Operator
-                    │
-        ┌───────────┼─────────────────┐
-        ▼           ▼                 ▼
-   MinIO Bucket   ConfigMaps/     CronJob / Airflow
-   Provisioning    Secrets         REST API Trigger
-        │                                 │
-        └───────────────┬─────────────────┘
-                         ▼
-                Status & Conditions
-                         │
-              ┌──────────┼──────────┐
-              ▼          ▼          ▼
-          Events    Prometheus   Airflow
-                       Metrics    Pipeline Run
-                         │
-                         ▼
-                  Grafana Dashboard
+```mermaid
+graph TD
+    %% Define styles/colors
+    classDef git fill:#F05032,stroke:#333,stroke-width:2px,color:#fff;
+    classDef k8s fill:#326CE5,stroke:#333,stroke-width:2px,color:#fff;
+    classDef operator fill:#00ADD8,stroke:#333,stroke-width:2px,color:#fff;
+    classDef workload fill:#F5A623,stroke:#333,stroke-width:2px,color:#fff;
+    classDef obs fill:#E6522C,stroke:#333,stroke-width:2px,color:#fff;
 
-                Pipeline Failure
-                         │
-                         ▼
-              Failure Summarizer Service
-                         │
-                         ▼
-              status.failureSummary updated
+    %% Nodes
+    GitPush["Git Push"] --> Github["GitHub Repository"]:::git
+    Github --> ArgoCD["ArgoCD Sync"]:::git
+    ArgoCD --> K8sAPI["Kubernetes API Server"]:::k8s
+    K8sAPI --> CRD["DataPipeline CRD"]:::k8s
+    CRD --> Operator["Velora Operator"]:::operator
+
+    subgraph Provisioning ["Platform Reconciliation (Operator Loop)"]
+        Operator --> MinIO["MinIO Buckets"]:::workload
+        Operator --> Config["ConfigMaps / Secrets"]:::workload
+        Operator --> Cron["CronJob / Airflow REST API"]:::workload
+    end
+
+    subgraph Runtime ["Pipeline Execution"]
+        Cron --> AirflowRun["Airflow Pipeline Run"]:::workload
+        Config --> AirflowRun
+        MinIO --> AirflowRun
+    end
+
+    subgraph Telemetry ["Observability Stack"]
+        Operator --> PromMetrics["Prometheus Metrics"]:::obs
+        AirflowRun --> PromMetrics
+        PromMetrics --> Grafana["Grafana Dashboard"]:::obs
+        PromMetrics --> Alertmanager["Alertmanager Alerts"]:::obs
+    end
+
+    subgraph AI ["AI Root Cause Analysis"]
+        AirflowRun -- "On Failure" --> FailureSvc["Failure Summarizer Service"]:::obs
+        FailureSvc --> LLM["LLM (Gemini / Ollama)"]
+        LLM --> UpdateStatus["Update status.failureSummary"]:::k8s
+        UpdateStatus --> CRD
+    end
 ```
 
 ---
+
 
 ## Setup & Bootstrap (Phase 1)
 
