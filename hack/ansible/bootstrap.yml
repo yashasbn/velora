@@ -1,0 +1,122 @@
+---
+# =============================================================================
+# hack/ansible/bootstrap.yml
+# Ansible playbook for bare-metal / VM node bootstrapping.
+#
+# Configures system prerequisites, container runtime (containerd),
+# and installs Kubernetes components (kubelet, kubeadm, kubectl).
+#
+# Usage:
+#   ansible-playbook -i inventory.ini bootstrap.yml --ask-become-pass
+# =============================================================================
+- name: Bootstrap Kubernetes Nodes
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Ensure system is updated
+      apt:
+        update_cache: true
+        upgrade: dist
+      when: ansible_os_family == "Debian"
+
+    # 1. Sysctl & Kernel Modules config
+    - name: Load kernel modules for container runtime
+      kernel_module:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Set sysctl parameters for Kubernetes networking
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/99-kubernetes-cri.conf
+        state: present
+        reload: true
+      loop:
+        - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { name: 'net.ipv4.ip_forward', value: '1' }
+        - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+
+    # 2. Containerd installation
+    - name: Install containerd runtime and curl
+      apt:
+        name:
+          - containerd
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+
+    - name: Ensure containerd config directory exists
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Generate default containerd configuration
+      shell: containerd config default > /etc/containerd/config.toml
+      args:
+        creates: /etc/containerd/config.toml
+      notify: Restart containerd
+
+    - name: Configure containerd to use SystemdCgroup
+      replace:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+      notify: Restart containerd
+
+    # 3. Kubernetes repo keyring & installation
+    - name: Create keyring directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Kubernetes apt keyring
+      get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+        dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+        mode: '0644'
+
+    - name: Add Kubernetes apt repository
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /"
+        state: present
+        filename: kubernetes
+
+    - name: Install kubelet, kubeadm, and kubectl
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: true
+
+    - name: Pin Kubernetes packages to prevent accidental upgrades
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Enable and start kubelet service
+      systemd:
+        name: kubelet
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted
