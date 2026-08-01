@@ -8,7 +8,6 @@ terraform {
   }
 }
 
-provider "kind" {}
 
 locals {
   # Build the list of worker nodes dynamically based on var.worker_count
