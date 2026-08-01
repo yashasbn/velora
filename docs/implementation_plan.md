@@ -20,21 +20,29 @@ In Docker Desktop settings:
 - Settings → General → Check **"Use the WSL 2 based engine"**
 - Settings → Resources → WSL Integration → Enable integration with your Ubuntu distro.
 
+If you encounter a permission denied error when running `docker ps` inside Ubuntu:
+```bash
+sudo usermod -aG docker $USER
+sudo apt install util-linux-extra
+newgrp docker
+```
+
 ### 3. Install Tooling Inside WSL2
-Run these commands inside your WSL2 terminal to install the correct packages:
+Run these commands inside your WSL2 Ubuntu terminal:
 
 #### Go 1.22+
 ```bash
 curl -LO https://go.dev/dl/go1.22.5.linux-amd64.tar.gz
 sudo tar -C /usr/local -xzf go1.22.5.linux-amd64.tar.gz
 echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+echo 'export PATH=$PATH:$(go env GOPATH)/bin' >> ~/.bashrc
 source ~/.bashrc
 ```
 
 #### kubectl
+Install via Snap:
 ```bash
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+sudo snap install kubectl --classic
 ```
 
 #### Helm
@@ -43,18 +51,15 @@ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 ```
 
 #### kind
+Install via Go:
 ```bash
-# For AMD64 / x86_64
-curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
-chmod +x ./kind
-sudo mv ./kind /usr/local/bin/kind
+go install sigs.k8s.io/kind@latest
 ```
 
 #### Terraform
+Install via Snap:
 ```bash
-wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com/gpg $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-sudo apt update && sudo apt install terraform
+sudo snap install terraform --classic
 ```
 
 #### kubebuilder (v4)
