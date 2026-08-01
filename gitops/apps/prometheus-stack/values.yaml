@@ -1,0 +1,110 @@
+# kube-prometheus-stack Helm values for Velora
+# Chart: prometheus-community/kube-prometheus-stack
+#
+# Tuned for a kind cluster: reduced replicas, small storage, no HA.
+
+grafana:
+  enabled: true
+  adminPassword: velora-grafana-admin   # Override in prod via Secret
+
+  service:
+    type: NodePort
+    nodePort: 30300
+
+  persistence:
+    enabled: false   # Use ephemeral storage for local dev
+
+  # Provision the Velora dashboard automatically
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+prometheus:
+  prometheusSpec:
+    # Scrape all ServiceMonitors in all namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 2Gi
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+
+# Disable components we don't need for local dev to save resources
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+# ---------------------------------------------------------------------------
+# Custom Alertmanager rules for Velora
+# ---------------------------------------------------------------------------
+additionalPrometheusRulesMap:
+  velora-rules:
+    groups:
+      - name: velora.datapipeline
+        interval: 60s
+        rules:
+          - alert: DataPipelineRepeatedFailures
+            expr: |
+              increase(velora_datapipeline_failures_total[1h]) > 3
+            for: 5m
+            labels:
+              severity: warning
+              team: data-engineering
+            annotations:
+              summary: "DataPipeline {{ $labels.pipeline }} is failing repeatedly"
+              description: >
+                Pipeline {{ $labels.pipeline }} in namespace {{ $labels.namespace }}
+                has failed more than 3 times in the last hour.
+                Check kubectl describe datapipeline {{ $labels.pipeline }} for events and status.
+
+          - alert: OperatorReconcileErrorRate
+            expr: |
+              rate(velora_operator_reconcile_errors_total[5m]) > 0.1
+            for: 2m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "Velora operator reconcile error rate is high"
+              description: >
+                The Velora operator is experiencing more than 0.1 reconcile errors per second
+                over the last 5 minutes. Check operator logs in velora-system namespace.
+
+          - alert: DataPipelineNotReady
+            expr: |
+              velora_datapipeline_ready == 0
+            for: 10m
+            labels:
+              severity: warning
+              team: data-engineering
+            annotations:
+              summary: "DataPipeline {{ $labels.pipeline }} has been unready for 10+ minutes"
+              description: >
+                Pipeline {{ $labels.pipeline }} in {{ $labels.namespace }}
+                has not been in Ready phase for 10 minutes.
