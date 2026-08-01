@@ -1,0 +1,126 @@
+# Apache Airflow Helm values for Velora (kind/local)
+# Chart: apache-airflow/airflow
+#
+# Key decisions:
+# - KubernetesExecutor: each task runs as a dedicated K8s Pod — no shared
+#   volume DAG pattern, no celery workers to manage.
+# - REST API enabled: the Velora operator triggers DAG runs via POST
+#   /api/v1/dags/{dag_id}/dagRuns — not by writing Python files.
+# - useHelmHooks: false on both jobs (required for ArgoCD compatibility).
+# - Minimal resources tuned for a 3-node kind cluster.
+# - Git-sync disabled — DAGs are managed programmatically via the REST API.
+
+defaultAirflowRepository: apache/airflow
+defaultAirflowTag: "2.9.3"
+airflowVersion: "2.9.3"
+
+executor: KubernetesExecutor
+
+# ---------------------------------------------------------------------------
+# Database — embedded PostgreSQL (test/dev only; swap for managed DB in prod)
+# ---------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  auth:
+    username: airflow
+    password: airflow
+    database: airflow
+
+# ---------------------------------------------------------------------------
+# Required for ArgoCD compatibility
+# ---------------------------------------------------------------------------
+createUserJob:
+  useHelmHooks: false
+  applyCustomEnv: false
+
+migrateDatabaseJob:
+  useHelmHooks: false
+  applyCustomEnv: false
+
+# ---------------------------------------------------------------------------
+# Webserver — enable REST API, expose via NodePort
+# ---------------------------------------------------------------------------
+webserver:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  service:
+    type: NodePort
+    nodePort: 30081
+  # Enable the REST API (Airflow 2.x)
+  webserverConfig: |
+    from airflow.www.security import AirflowSecurityManager
+    AUTH_ROLE_PUBLIC = 'Admin'  # Allow unauthenticated access for local dev only
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    email: admin@velora.local
+    firstName: Velora
+    lastName: Admin
+    password: admin
+
+# ---------------------------------------------------------------------------
+# Scheduler
+# ---------------------------------------------------------------------------
+scheduler:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Workers (KubernetesExecutor spawns task pods — no persistent worker)
+# ---------------------------------------------------------------------------
+workers:
+  replicas: 0   # Not used with KubernetesExecutor
+
+# ---------------------------------------------------------------------------
+# Logs — local PVC (replace with S3/MinIO in a real deployment)
+# ---------------------------------------------------------------------------
+logs:
+  persistence:
+    enabled: true
+    size: 2Gi
+
+# ---------------------------------------------------------------------------
+# DAG configuration
+# The Velora operator does NOT write DAG files into a shared volume.
+# Instead it triggers runs via the REST API. We ship a single "wrapper" DAG
+# that reads its task config from the pipeline ConfigMap at runtime.
+# ---------------------------------------------------------------------------
+dags:
+  persistence:
+    enabled: true
+    size: 1Gi
+  gitSync:
+    enabled: false   # Operator manages DAG runs via REST API
+
+# ---------------------------------------------------------------------------
+# Environment variables passed to all Airflow components
+# ---------------------------------------------------------------------------
+env:
+  - name: AIRFLOW__API__AUTH_BACKENDS
+    value: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+  - name: AIRFLOW__WEBSERVER__EXPOSE_CONFIG
+    value: "true"
+  - name: AIRFLOW__CORE__LOAD_EXAMPLES
+    value: "false"
+
+# ---------------------------------------------------------------------------
+# Flower (not needed with KubernetesExecutor)
+# ---------------------------------------------------------------------------
+flower:
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# StatsD (disabled to save resources)
+# ---------------------------------------------------------------------------
+statsd:
+  enabled: false

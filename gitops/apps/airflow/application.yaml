@@ -1,0 +1,33 @@
+# ArgoCD Application: Apache Airflow
+# Managed by the velora-apps App-of-Apps.
+# ArgoCD syncs this against gitops/apps/airflow/
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: airflow
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/YOUR_USERNAME/velora
+    targetRevision: HEAD
+    path: gitops/apps/airflow
+    helm:
+      releaseName: airflow
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: airflow
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

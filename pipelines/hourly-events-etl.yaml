@@ -1,0 +1,39 @@
+apiVersion: velora.dev/v1alpha1
+kind: DataPipeline
+metadata:
+  name: hourly-events-etl
+  namespace: default
+  labels:
+    velora.dev/team: data-engineering
+    velora.dev/domain: product-analytics
+spec:
+  # Cron schedule: run every hour at :05 (allows upstream events to settle)
+  schedule: "5 * * * *"
+
+  image:
+    repository: apache/airflow
+    tag: "2.9.3"
+
+  source:
+    type: postgres
+    secretRef: events-db-creds       # K8s Secret with events database credentials
+
+  destination:
+    type: minio
+    bucket: events-warehouse         # Operator ensures this bucket exists
+
+  transform: sql
+  transformRef: transforms/hourly-events.sql
+
+  resources:
+    cpu: "250m"
+    memory: "512Mi"
+
+  retries: 2
+  timeout: 15m
+
+  alerting:
+    enabled: true
+
+  monitoring:
+    enabled: true

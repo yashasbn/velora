@@ -1,0 +1,46 @@
+# Bitnami MinIO Helm values for Velora (kind/local)
+# Chart: bitnami/minio (standalone mode — simpler than the MinIO Operator for local dev)
+#
+# The Velora operator provisions buckets via the MinIO S3 API
+# using the credentials in this secret.
+
+mode: standalone
+
+image:
+  repository: bitnami/minio
+  tag: latest
+  pullPolicy: IfNotPresent
+
+auth:
+  rootUser: velora
+  rootPassword: velora-minio-secret   # Override via Secret in production
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: ""   # Uses the default StorageClass (kind provides standard)
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+service:
+  type: NodePort
+  nodePorts:
+    api: 30090      # S3 API
+    console: 30091  # MinIO Web Console
+
+# Default buckets created at startup
+# The operator will also create pipeline-specific buckets via the S3 API.
+defaultBuckets: "velora-artifacts,velora-logs"
+
+# Metrics endpoint for Prometheus scraping
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring

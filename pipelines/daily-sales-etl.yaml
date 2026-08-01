@@ -1,0 +1,39 @@
+apiVersion: velora.dev/v1alpha1
+kind: DataPipeline
+metadata:
+  name: daily-sales-etl
+  namespace: default
+  labels:
+    velora.dev/team: data-engineering
+    velora.dev/domain: sales
+spec:
+  # Cron schedule: run daily at 02:00 UTC
+  schedule: "0 2 * * *"
+
+  image:
+    repository: apache/airflow
+    tag: "2.9.3"
+
+  source:
+    type: postgres
+    secretRef: sales-db-creds        # K8s Secret with host/port/user/pass/dbname
+
+  destination:
+    type: minio
+    bucket: analytics-warehouse      # Operator ensures this bucket exists
+
+  transform: sql
+  transformRef: transforms/daily-sales.sql   # ConfigMap key loaded by the DAG runner
+
+  resources:
+    cpu: "500m"
+    memory: "1Gi"
+
+  retries: 3
+  timeout: 30m
+
+  alerting:
+    enabled: true
+
+  monitoring:
+    enabled: true
