@@ -1,0 +1,5 @@
+resources:
+  - airflow/application.yaml
+  - minio/application.yaml
+  - prometheus-stack/application.yaml
+  - velora-operator/application.yaml
