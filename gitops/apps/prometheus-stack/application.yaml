@@ -9,14 +9,17 @@ metadata:
 spec:
   project: default
 
-  source:
-    repoURL: https://github.com/yashasbn/velora.git
-    targetRevision: HEAD
-    path: gitops/apps/prometheus-stack
-    helm:
-      releaseName: prometheus-stack
-      valueFiles:
-        - values.yaml
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 61.0.0
+      helm:
+        releaseName: prometheus-stack
+        valueFiles:
+          - $values/gitops/apps/prometheus-stack/values.yaml
+    - repoURL: https://github.com/yashasbn/velora.git
+      targetRevision: HEAD
+      ref: values
 
   destination:
     server: https://kubernetes.default.svc

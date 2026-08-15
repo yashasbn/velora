@@ -10,14 +10,17 @@ metadata:
 spec:
   project: default
 
-  source:
-    repoURL: https://github.com/yashasbn/velora.git
-    targetRevision: HEAD
-    path: gitops/apps/minio
-    helm:
-      releaseName: minio
-      valueFiles:
-        - values.yaml
+  sources:
+    - repoURL: https://charts.bitnami.com/bitnami
+      chart: minio
+      targetRevision: 14.6.0
+      helm:
+        releaseName: minio
+        valueFiles:
+          - $values/gitops/apps/minio/values.yaml
+    - repoURL: https://github.com/yashasbn/velora.git
+      targetRevision: HEAD
+      ref: values
 
   destination:
     server: https://kubernetes.default.svc

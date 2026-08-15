@@ -11,14 +11,17 @@ metadata:
 spec:
   project: default
 
-  source:
-    repoURL: https://github.com/yashasbn/velora.git
-    targetRevision: HEAD
-    path: gitops/apps/airflow
-    helm:
-      releaseName: airflow
-      valueFiles:
-        - values.yaml
+  sources:
+    - repoURL: https://airflow.apache.org
+      chart: airflow
+      targetRevision: 1.14.0
+      helm:
+        releaseName: airflow
+        valueFiles:
+          - $values/gitops/apps/airflow/values.yaml
+    - repoURL: https://github.com/yashasbn/velora.git
+      targetRevision: HEAD
+      ref: values
 
   destination:
     server: https://kubernetes.default.svc
