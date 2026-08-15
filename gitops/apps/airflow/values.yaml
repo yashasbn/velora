@@ -21,6 +21,8 @@ executor: KubernetesExecutor
 # ---------------------------------------------------------------------------
 postgresql:
   enabled: true
+  image:
+    tag: "16"
   auth:
     username: airflow
     password: airflow
