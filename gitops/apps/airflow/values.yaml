@@ -51,7 +51,10 @@ webserver:
       memory: 1Gi
   service:
     type: NodePort
-    nodePort: 30081
+    ports:
+      - name: airflow-ui
+        port: 8080
+        nodePort: 30081
   # Enable the REST API (Airflow 2.x)
   webserverConfig: |
     from airflow.www.security import AirflowSecurityManager
