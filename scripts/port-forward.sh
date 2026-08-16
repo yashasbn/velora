@@ -51,7 +51,7 @@ case "$SERVICE" in
     ;;
   minio)
     pf "MinIO API"     minio minio 9000 9000
-    pf "MinIO Console" minio minio 9001 9001
+    pf "MinIO Console" minio minio-console 9001 9001
     info "MinIO Console: http://localhost:9001"
     wait
     ;;
@@ -69,7 +69,7 @@ case "$SERVICE" in
     pf "ArgoCD"        argocd    argocd-server                            8080 80
     pf "Airflow"       airflow   airflow-webserver                        8081 8080
     pf "MinIO API"     minio     minio                                    9000 9000
-    pf "MinIO Console" minio     minio                                    9001 9001
+    pf "MinIO Console" minio     minio-console                            9001 9001
     pf "Grafana"       monitoring prometheus-stack-grafana                3000 80
     pf "Prometheus"    monitoring prometheus-stack-kube-prom-prometheus   9090 9090
     echo ""
