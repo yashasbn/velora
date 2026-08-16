@@ -22,7 +22,7 @@ executor: KubernetesExecutor
 postgresql:
   enabled: true
   image:
-    tag: "16"
+    tag: "latest"   # Bitnami removed versioned tags from public Docker Hub (Aug 2025)
   auth:
     username: airflow
     password: airflow

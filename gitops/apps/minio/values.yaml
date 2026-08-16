@@ -1,5 +1,9 @@
-# Bitnami MinIO Helm values for Velora (kind/local)
-# Chart: bitnami/minio (standalone mode — simpler than the MinIO Operator for local dev)
+# Official MinIO Helm values for Velora (kind/local)
+# Chart: minio/minio (from https://charts.min.io/)
+#
+# Switched from bitnami/minio because Bitnami removed versioned image
+# tags from public Docker Hub (Aug 2025). The official chart uses
+# minio/minio images directly from Docker Hub which remain available.
 #
 # The Velora operator provisions buckets via the MinIO S3 API
 # using the credentials in this secret.
@@ -7,12 +11,15 @@
 mode: standalone
 
 image:
-  repository: bitnami/minio
+  repository: minio/minio
+  tag: latest
   pullPolicy: IfNotPresent
 
-auth:
-  rootUser: velora
-  rootPassword: velora-minio-secret   # Override via Secret in production
+rootUser: velora
+rootPassword: velora-minio-secret   # Override via Secret in production
+
+replicas: 1
+drivesPerNode: 1
 
 persistence:
   enabled: true
@@ -29,17 +36,25 @@ resources:
 
 service:
   type: NodePort
-  nodePorts:
-    api: 30090      # S3 API
-    console: 30091  # MinIO Web Console
+  port: 9000
+  nodePort: 30090
+
+consoleService:
+  type: NodePort
+  port: 9001
+  nodePort: 30091
 
 # Default buckets created at startup
-# The operator will also create pipeline-specific buckets via the S3 API.
-defaultBuckets: "velora-artifacts,velora-logs"
+buckets:
+  - name: velora-artifacts
+    policy: none
+    purge: false
+  - name: velora-logs
+    policy: none
+    purge: false
 
 # Metrics endpoint for Prometheus scraping
 metrics:
-  enabled: true
   serviceMonitor:
     enabled: true
     namespace: monitoring

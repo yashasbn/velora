@@ -275,3 +275,39 @@ Windows
 ```
 
 > **Key rule**: All scripts (`bootstrap.sh`, `port-forward.sh`, `verify-phase.sh`) must be run from the **Ubuntu WSL2** shell, not from Windows PowerShell.
+
+---
+
+### ❌ Issue 9: Terraform control plane node error
+
+**Symptom**
+```
+Error: could not locate any control plane nodes for cluster named 'velora'. Use the --name option to select a different cluster
+```
+
+**Root Cause**  
+Terraform's local state (`terraform.tfstate`) believes the `velora` cluster exists, but the Docker containers for the cluster were deleted (e.g., via a Docker prune, reboot, or manual deletion). 
+
+**Fix**  
+Delete the local Terraform state to force a fresh cluster creation:
+```bash
+cd /mnt/c/Projects/velora/infra/terraform
+rm -f terraform.tfstate terraform.tfstate.backup
+```
+Then re-run `./scripts/bootstrap.sh`.
+
+---
+
+### ❌ Issue 10: Helm timeout during ArgoCD install
+
+**Symptom**
+```
+Error: failed pre-install: 1 error occurred:
+        * timed out waiting for the condition
+```
+
+**Root Cause**  
+Helm uses a 5-minute timeout (`--timeout 5m`) by default for the ArgoCD installation. When installing on a fresh cluster with a slower internet connection, downloading the large ArgoCD container images from `quay.io` can take longer than 5 minutes, causing Helm's pre-install hook (`argocd-redis-secret-init` job) to time out while stuck in `ContainerCreating` (Pulling image).
+
+**Fix**  
+The image pull actually continues in the background. Wait a few more minutes for the pull to finish, and simply re-run `./scripts/bootstrap.sh`. Since the image will now be cached on the cluster node, the installation will proceed instantly.

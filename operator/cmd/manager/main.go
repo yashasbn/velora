@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"go.uber.org/zap/zapcore"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -68,7 +69,7 @@ func main() {
 	opts := zap.Options{
 		Development: true,
 		// Use ISO8601 timestamps for human-readable logs (not scientific notation).
-		TimeEncoder: zapcore_iso8601(),
+		TimeEncoder: zapcore_iso8601,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -149,10 +150,8 @@ func main() {
 	}
 }
 
-// zapcore_iso8601 returns a zapcore.TimeEncoder that uses ISO8601 format.
+// zapcore_iso8601 is a zapcore.TimeEncoder that uses ISO8601 format.
 // This avoids the unreadable scientific-notation timestamps from the default encoder.
-func zapcore_iso8601() func(t time.Time, enc interface{ AppendString(string) }) {
-	return func(t time.Time, enc interface{ AppendString(string) }) {
-		enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000Z"))
-	}
+func zapcore_iso8601(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+	enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000Z"))
 }

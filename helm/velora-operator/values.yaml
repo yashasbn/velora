@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/yashasbn/velora-operator
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Never   # Image loaded directly into kind (not pushed to ghcr.io yet)
 
 serviceAccount:
   create: true
