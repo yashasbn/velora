@@ -74,6 +74,21 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	// Fall back to environment variables when CLI flags are empty.
+	// The Helm deployment template injects these as env vars from Secrets.
+	if minioAccessKey == "" {
+		minioAccessKey = os.Getenv("MINIO_ACCESS_KEY")
+	}
+	if minioSecretKey == "" {
+		minioSecretKey = os.Getenv("MINIO_SECRET_KEY")
+	}
+	if airflowUsername == "" {
+		airflowUsername = os.Getenv("AIRFLOW_USERNAME")
+	}
+	if airflowPassword == "" {
+		airflowPassword = os.Getenv("AIRFLOW_PASSWORD")
+	}
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// ---------------------------------------------------------------------------

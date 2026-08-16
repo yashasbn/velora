@@ -1,0 +1,61 @@
+# Example DataPipeline — apply this to see the Velora operator in action.
+#
+#   kubectl apply -f pipeline.yaml
+#   kubectl get datapipelines          # short name: dp
+#
+# The operator will:
+#   1. Create the MinIO bucket "user-events-daily"
+#   2. Register / update an Airflow DAG via REST API
+#   3. Set up a CronJob that triggers the DAG on schedule
+#   4. Emit Prometheus metrics for pipeline health
+apiVersion: velora.dev/v1alpha1
+kind: DataPipeline
+metadata:
+  name: user-events-daily
+  namespace: default
+spec:
+  schedule: "0 2 * * *"           # Every day at 02:00 UTC
+
+  image:
+    repository: apache/airflow
+    tag: "2.9.3"
+    pullPolicy: IfNotPresent
+
+  source:
+    type: postgres
+    secretRef: demo-postgres-creds   # You must create this Secret (see below)
+
+  destination:
+    type: minio
+    bucket: user-events-daily
+
+  transform: sql
+  transformRef: "pipelines/user_events/transform.sql"
+
+  resources:
+    cpu: "500m"
+    memory: "512Mi"
+
+  retries: 3
+  timeout: "30m"
+
+  alerting:
+    enabled: true
+    channel: "#data-alerts"
+
+  monitoring:
+    enabled: true
+---
+# Demo source credentials Secret (replace with real values in production)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-postgres-creds
+  namespace: default
+type: Opaque
+stringData:
+  host: "postgres.example.com"
+  port: "5432"
+  database: "analytics"
+  username: "readonly"
+  password: "changeme"

@@ -1,0 +1,316 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: datapipelines.velora.dev
+spec:
+  group: velora.dev
+  names:
+    categories:
+    - velora
+    kind: DataPipeline
+    listKind: DataPipelineList
+    plural: datapipelines
+    shortNames:
+    - dp
+    - dpipe
+    singular: datapipeline
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.schedule
+      name: Schedule
+      type: string
+    - jsonPath: .status.lastRun
+      name: Last Run
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          DataPipeline is the Schema for the datapipelines API.
+          A single DataPipeline resource represents a declarative data pipeline:
+          the platform provisions storage, schedules orchestration, and monitors
+          execution automatically.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DataPipelineSpec defines the desired state of DataPipeline.
+            properties:
+              alerting:
+                description: Alerting configures alerting for pipeline failures.
+                properties:
+                  channel:
+                    description: Channel optionally specifies a Slack/PagerDuty channel
+                      for alerts.
+                    type: string
+                  enabled:
+                    description: Enabled toggles alerting. When true, Alertmanager
+                      rules fire on failures.
+                    type: boolean
+                type: object
+              destination:
+                description: Destination defines where the pipeline writes data to.
+                properties:
+                  bucket:
+                    description: |-
+                      Bucket is the target storage bucket name.
+                      The operator will provision this bucket if it does not exist.
+                    maxLength: 63
+                    minLength: 3
+                    type: string
+                  secretRef:
+                    description: |-
+                      SecretRef optionally references credentials for the destination.
+                      For MinIO the operator uses its own internal credentials from the
+                      velora-minio-creds Secret in velora-system namespace.
+                    type: string
+                  type:
+                    description: Type is the destination type (e.g., "minio", "s3",
+                      "bigquery").
+                    enum:
+                    - minio
+                    - s3
+                    - bigquery
+                    - postgres
+                    type: string
+                required:
+                - bucket
+                - type
+                type: object
+              image:
+                description: Image specifies the container image used for pipeline
+                  execution tasks.
+                properties:
+                  pullPolicy:
+                    default: IfNotPresent
+                    description: PullPolicy is the image pull policy. Defaults to
+                      IfNotPresent.
+                    enum:
+                    - Always
+                    - Never
+                    - IfNotPresent
+                    type: string
+                  repository:
+                    description: Repository is the image repository (e.g., "apache/airflow").
+                    type: string
+                  tag:
+                    default: latest
+                    description: Tag is the image tag (e.g., "2.9.3"). Defaults to
+                      "latest".
+                    type: string
+                required:
+                - repository
+                type: object
+              monitoring:
+                description: Monitoring enables Prometheus metrics and Grafana dashboard
+                  integration.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled toggles monitoring. When true, the operator emits per-pipeline
+                      Prometheus metrics and the dashboard shows pipeline-level panels.
+                    type: boolean
+                type: object
+              resources:
+                description: Resources defines the compute resources for pipeline
+                  task pods.
+                properties:
+                  cpu:
+                    description: CPU is the CPU resource request/limit (e.g., "500m",
+                      "2").
+                    type: string
+                  memory:
+                    description: Memory is the memory resource request/limit (e.g.,
+                      "1Gi", "512Mi").
+                    type: string
+                type: object
+              retries:
+                default: 3
+                description: Retries is the number of times to retry a failed pipeline
+                  run.
+                maximum: 10
+                minimum: 0
+                type: integer
+              schedule:
+                description: Schedule is a cron expression defining when the pipeline
+                  runs.
+                pattern: ^(@(annually|yearly|monthly|weekly|daily|hourly|reboot))|(@every
+                  (\d+(ns|us|µs|ms|s|m|h))+)|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)
+                  ?){5,7})$
+                type: string
+              source:
+                description: Source defines where the pipeline reads data from.
+                properties:
+                  secretRef:
+                    description: |-
+                      SecretRef is the name of a Kubernetes Secret in the same namespace
+                      containing connection credentials. The operator validates this Secret
+                      exists and emits a SecretMissing event if not found.
+                    type: string
+                  type:
+                    description: Type is the source type (e.g., "postgres", "mysql",
+                      "s3", "kafka").
+                    enum:
+                    - postgres
+                    - mysql
+                    - s3
+                    - kafka
+                    - bigquery
+                    type: string
+                required:
+                - secretRef
+                - type
+                type: object
+              timeout:
+                description: Timeout is the maximum duration for a single pipeline
+                  run (e.g., "30m", "2h").
+                type: string
+              transform:
+                description: Transform specifies the transformation type (e.g., "sql",
+                  "python").
+                enum:
+                - sql
+                - python
+                - spark
+                type: string
+              transformRef:
+                description: TransformRef is a reference to the transform logic (e.g.,
+                  a ConfigMap key path).
+                type: string
+            required:
+            - destination
+            - image
+            - schedule
+            - source
+            type: object
+          status:
+            description: DataPipelineStatus defines the observed state of DataPipeline.
+            properties:
+              conditions:
+                description: |-
+                  Conditions holds the conditions for this DataPipeline.
+                  Standard condition types: Ready, BucketCreated, DAGSynced.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              configMapName:
+                description: ConfigMapName is the name of the managed ConfigMap holding
+                  pipeline config.
+                type: string
+              cronJobName:
+                description: CronJobName is the name of the managed CronJob resource.
+                type: string
+              failureSummary:
+                description: |-
+                  FailureSummary is a plain-English root-cause summary written by the
+                  optional AI Failure Summarizer service when phase=Failed.
+                type: string
+              lastRun:
+                description: LastRun is the timestamp of the most recent pipeline
+                  execution (any result).
+                format: date-time
+                type: string
+              lastSuccessfulRun:
+                description: LastSuccessfulRun is the timestamp of the most recent
+                  successful execution.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the .metadata.generation that was last reconciled.
+                  Use this to detect if the spec changed since the last reconcile.
+                format: int64
+                type: integer
+              phase:
+                description: 'Phase is the high-level lifecycle phase: Pending, Running,
+                  Ready, Failed.'
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
