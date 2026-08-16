@@ -93,6 +93,7 @@ logs:
   persistence:
     enabled: true
     size: 2Gi
+    accessMode: ReadWriteOnce
 
 # ---------------------------------------------------------------------------
 # DAG configuration
