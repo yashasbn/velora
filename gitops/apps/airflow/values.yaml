@@ -91,10 +91,7 @@ workers:
 # ---------------------------------------------------------------------------
 logs:
   persistence:
-    enabled: true
-    size: 2Gi
-    accessModes:
-      - ReadWriteOnce
+    enabled: false
 
 # ---------------------------------------------------------------------------
 # DAG configuration
