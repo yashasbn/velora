@@ -106,6 +106,18 @@ Access URLs:
 - **MinIO**: [http://localhost:30090](http://localhost:30090) (velora / velora-minio-secret)
 - **Grafana**: [http://localhost:30300](http://localhost:30300)
 
+### 3. Build & Deploy the Operator (Phase 2)
+
+Since the Velora Operator is custom-built and not pushed to a public Docker registry during local development, you must manually build and load its Docker image into your `kind` cluster:
+
+```bash
+cd operator
+make docker-build
+kind load docker-image ghcr.io/yashasbn/velora-operator:latest --name velora
+```
+
+Once loaded, ArgoCD will automatically detect the image and start the `velora-operator` deployment.
+
 ---
 
 ## Teardown
