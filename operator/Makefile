@@ -43,12 +43,20 @@ run: generate fmt vet
 # Docker
 # ---------------------------------------------------------------------------
 .PHONY: docker-build
-docker-build:
+docker-build: docker-build-operator docker-build-trigger
+
+.PHONY: docker-build-operator
+docker-build-operator:
 	docker build -t $(IMG) -f Dockerfile .
+
+.PHONY: docker-build-trigger
+docker-build-trigger:
+	docker build -t $(DAG_TRIGGER_IMG) -f Dockerfile.dag-trigger .
 
 .PHONY: docker-push
 docker-push:
 	docker push $(IMG)
+	docker push $(DAG_TRIGGER_IMG)
 
 # ---------------------------------------------------------------------------
 # Code generation

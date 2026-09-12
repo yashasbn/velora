@@ -101,7 +101,11 @@ To forward all platform services, run:
 Access URLs:
 - **ArgoCD**: [http://localhost:30080](http://localhost:30080)
   - Username: `admin`
-  - Password: run `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d` inside WSL2
+  - Password: run the following inside WSL2:
+    ```bash
+    export KUBECONFIG=~/.kube/velora-config
+    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+    ```
 - **Airflow**: [http://localhost:30081](http://localhost:30081)
 - **MinIO**: [http://localhost:30090](http://localhost:30090) (velora / velora-minio-secret)
 - **Grafana**: [http://localhost:30300](http://localhost:30300)

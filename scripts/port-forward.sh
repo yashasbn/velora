@@ -23,7 +23,12 @@ export KUBECONFIG
 pf() {
   local name=$1 ns=$2 svc=$3 local_port=$4 remote_port=$5
   info "Port-forwarding ${name}: http://localhost:${local_port}"
-  kubectl port-forward "svc/${svc}" "${local_port}:${remote_port}" -n "${ns}" &
+  (
+    while true; do
+      kubectl port-forward "svc/${svc}" "${local_port}:${remote_port}" -n "${ns}"
+      sleep 2
+    done
+  ) &
   echo $! >> /tmp/velora-pf-pids
 }
 
