@@ -6,10 +6,11 @@
 # Run this from inside WSL2 after completing the prerequisite tool installs.
 # It will:
 #   1. Provision the kind cluster via Terraform
-#   2. Install ArgoCD via Helm
-#   3. Register the GitHub repo with ArgoCD
-#   4. Apply the App-of-Apps ApplicationCR
-#   5. Print access URLs and credentials
+#   2. Pre-load container images into kind (prevents pull timeouts)
+#   3. Install ArgoCD via Helm (with retry logic)
+#   4. Register the GitHub repo with ArgoCD
+#   5. Apply the App-of-Apps ApplicationCR
+#   6. Print access URLs and credentials
 #
 # Usage:
 #   chmod +x scripts/bootstrap.sh
@@ -18,8 +19,7 @@
 set -euo pipefail
 
 # Ensure Go and user Go bin paths are included in PATH (handles WSL non-login shells)
-export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
-
+export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin:/snap/bin:/usr/local/bin
 
 # ---------------------------------------------------------------------------
 # Colours for readable output
@@ -42,12 +42,15 @@ ARGOCD_CHART_VERSION="${ARGOCD_CHART_VERSION:-10.2.2}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# ArgoCD app version that ships with chart 10.2.2
+ARGOCD_APP_VERSION="${ARGOCD_APP_VERSION:-v2.14.11}"
+
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 info "Running pre-flight checks..."
 for cmd in docker kind kubectl helm terraform; do
-  command -v "$cmd" &>/dev/null || fatal "'$cmd' not found in PATH — see the WSL2 setup section in the implementation plan."
+  command -v "$cmd" &>/dev/null || fatal "'$cmd' not found in PATH — see the WSL2 setup section in README.md."
 done
 docker info &>/dev/null || fatal "Docker daemon is not running. Start Docker Desktop."
 success "All tools found and Docker is running."
@@ -55,7 +58,7 @@ success "All tools found and Docker is running."
 # ---------------------------------------------------------------------------
 # Step 1 — Terraform: provision kind cluster
 # ---------------------------------------------------------------------------
-info "Step 1/5 — Provisioning kind cluster '${CLUSTER_NAME}' via Terraform..."
+info "Step 1/6 — Provisioning kind cluster '${CLUSTER_NAME}' via Terraform..."
 cd "$REPO_ROOT/infra/terraform"
 terraform init -upgrade -input=false
 terraform apply -auto-approve \
@@ -66,39 +69,102 @@ success "Kind cluster '${CLUSTER_NAME}' is ready."
 # ---------------------------------------------------------------------------
 # Step 2 — Configure kubectl
 # ---------------------------------------------------------------------------
-info "Step 2/5 — Configuring kubectl..."
+info "Step 2/6 — Configuring kubectl..."
 export KUBECONFIG="${KUBECONFIG_PATH}"
 kubectl cluster-info
 kubectl get nodes
 success "kubectl is configured."
 
 # ---------------------------------------------------------------------------
-# Step 3 — Install ArgoCD via Helm
+# Step 3 — Pre-load ArgoCD images into kind cluster
+#
+# WHY: kind nodes pull images from the internet via containerd. On slow or
+#      flaky connections this causes TLS handshake timeouts against quay.io,
+#      which makes the Helm --wait flag fail.  By pulling images on the Docker
+#      host first (which has better networking/caching) and then loading them
+#      into kind, we guarantee the images are available before Helm runs.
 # ---------------------------------------------------------------------------
-info "Step 3/5 — Installing ArgoCD (chart v${ARGOCD_CHART_VERSION})..."
+info "Step 3/6 — Pre-loading ArgoCD images into kind cluster..."
+
+ARGOCD_IMAGES=(
+  "quay.io/argoproj/argocd:${ARGOCD_APP_VERSION}"
+  "ghcr.io/dexidp/dex:v2.38.0"
+  "public.ecr.aws/docker/library/redis:7.2.4-alpine"
+)
+
+for img in "${ARGOCD_IMAGES[@]}"; do
+  info "  Pulling ${img} on Docker host..."
+  # Pull with retries — network can be flaky
+  for attempt in 1 2 3; do
+    if docker pull "$img" 2>/dev/null; then
+      success "  Pulled ${img}"
+      break
+    fi
+    if [[ $attempt -eq 3 ]]; then
+      warn "  Could not pull ${img} after 3 attempts — will rely on in-cluster pull."
+    else
+      warn "  Pull attempt ${attempt} failed, retrying in 5s..."
+      sleep 5
+    fi
+  done
+done
+
+# Load all images into kind in one batch (faster than one-by-one)
+info "  Loading images into kind cluster nodes..."
+for img in "${ARGOCD_IMAGES[@]}"; do
+  if docker image inspect "$img" &>/dev/null; then
+    kind load docker-image "$img" --name "${CLUSTER_NAME}" 2>/dev/null || {
+      # Fallback: manual docker save | ctr import
+      warn "  kind load failed for ${img}, using manual ctr import..."
+      NODE_NAME="${CLUSTER_NAME}-control-plane"
+      docker save "$img" | docker exec -i "$NODE_NAME" ctr -n k8s.io images import - 2>/dev/null || true
+    }
+  fi
+done
+success "Images pre-loaded into kind cluster."
+
+# ---------------------------------------------------------------------------
+# Step 4 — Install ArgoCD via Helm (with retry logic)
+# ---------------------------------------------------------------------------
+info "Step 4/6 — Installing ArgoCD (chart v${ARGOCD_CHART_VERSION})..."
 helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 helm repo update argo
 
 kubectl apply -f "$REPO_ROOT/gitops/argocd/install/namespace.yaml"
 kubectl apply -f "$REPO_ROOT/gitops/argocd/install/repo-secret.yaml"
 
-helm upgrade --install argocd argo/argo-cd \
-  --namespace "$ARGOCD_NAMESPACE" \
-  --version "$ARGOCD_CHART_VERSION" \
-  --values "$REPO_ROOT/gitops/argocd/install/values.yaml" \
-  --wait \
-  --timeout 5m
+# Helm install with retries
+MAX_HELM_ATTEMPTS=3
+for attempt in $(seq 1 $MAX_HELM_ATTEMPTS); do
+  info "  Helm install attempt ${attempt}/${MAX_HELM_ATTEMPTS}..."
+  if helm upgrade --install argocd argo/argo-cd \
+    --namespace "$ARGOCD_NAMESPACE" \
+    --version "$ARGOCD_CHART_VERSION" \
+    --values "$REPO_ROOT/gitops/argocd/install/values.yaml" \
+    --wait \
+    --timeout 10m; then
+    success "ArgoCD installed on attempt ${attempt}."
+    break
+  fi
 
-success "ArgoCD installed."
+  if [[ $attempt -eq $MAX_HELM_ATTEMPTS ]]; then
+    fatal "ArgoCD Helm install failed after ${MAX_HELM_ATTEMPTS} attempts. Check: kubectl get pods -n argocd"
+  fi
+
+  warn "  Attempt ${attempt} failed. Cleaning up before retry..."
+  # Delete any failed pre-install hooks/jobs that block the next attempt
+  kubectl delete jobs -n "$ARGOCD_NAMESPACE" --all --ignore-not-found 2>/dev/null || true
+  sleep 10
+done
 
 # ---------------------------------------------------------------------------
-# Step 4 — Register GitHub repo and apply App-of-Apps
+# Step 5 — Register GitHub repo and apply App-of-Apps
 # ---------------------------------------------------------------------------
-info "Step 4/5 — Registering GitHub repo with ArgoCD..."
+info "Step 5/6 — Registering GitHub repo with ArgoCD..."
 
 # Wait for ArgoCD server to be ready
 kubectl wait --for=condition=available deployment/argocd-server \
-  -n "$ARGOCD_NAMESPACE" --timeout=120s
+  -n "$ARGOCD_NAMESPACE" --timeout=180s
 
 # Patch the App-of-Apps YAML with the actual repo URL and apply
 APP_OF_APPS="$REPO_ROOT/gitops/argocd/apps/velora-app-of-apps.yaml"
@@ -113,9 +179,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 5 — Print access info
+# Step 6 — Print access info
 # ---------------------------------------------------------------------------
-info "Step 5/5 — Gathering access credentials..."
+info "Step 6/6 — Gathering access credentials..."
 ARGOCD_PASSWORD=$(kubectl get secret argocd-initial-admin-secret \
   -n "$ARGOCD_NAMESPACE" \
   -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo "<run: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d>")
