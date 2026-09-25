@@ -102,20 +102,23 @@ Install the following tools **inside WSL2 Ubuntu** (not Windows):
 | **kind** | 0.23+ | `go install sigs.k8s.io/kind@latest` |
 | **kubebuilder** | 4.x | `go install sigs.k8s.io/kubebuilder/cmd@latest` |
 
-### Configure Your Shell
+### Configure Your Shell (Session Only)
 
-Add these to your `~/.bashrc` (or `~/.zshrc`) so kubectl and Go binaries are always found:
+Velora uses a **session-only** environment — it does NOT permanently modify your `.bashrc`. When you want to work on Velora, source the env script:
 
 ```bash
-# Velora environment
-export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin:/snap/bin
-export KUBECONFIG=$HOME/.kube/velora-config
+cd /mnt/c/Projects/velora
+source scripts/env.sh
 ```
 
-Then reload:
-```bash
-source ~/.bashrc
-```
+This sets `KUBECONFIG` and `PATH` **only for the current terminal**. Close the terminal and it's gone.
+
+> [!TIP]
+> If you also want Go and snap tools available globally (for non-Velora work), you can optionally add just the PATH line to `~/.bashrc`:
+> ```bash
+> export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin:/snap/bin
+> ```
+> But **never** put `KUBECONFIG` in `.bashrc` — it will interfere with other clusters.
 
 ### Verify Your Environment
 
