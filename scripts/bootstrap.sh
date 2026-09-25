@@ -73,59 +73,10 @@ info "Step 3/5 — Loading pre-downloaded images into Kind nodes..."
 "$SCRIPT_DIR/load-images.sh"
 
 # ---------------------------------------------------------------------------
-# Step 4 — Install ArgoCD via Helm
+# Step 4/4 — Install ArgoCD via Helm & Apply App-of-Apps
 # ---------------------------------------------------------------------------
-info "Step 4/5 — Installing ArgoCD (chart v${ARGOCD_CHART_VERSION})..."
-helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
-helm repo update argo
-
-kubectl apply -f "$REPO_ROOT/gitops/argocd/install/namespace.yaml"
-kubectl apply -f "$REPO_ROOT/gitops/argocd/install/repo-secret.yaml"
-
-# Helm install with retries
-MAX_HELM_ATTEMPTS=3
-for attempt in $(seq 1 $MAX_HELM_ATTEMPTS); do
-  info "  Helm install attempt ${attempt}/${MAX_HELM_ATTEMPTS}..."
-  if helm upgrade --install argocd argo/argo-cd \
-    --namespace "$ARGOCD_NAMESPACE" \
-    --version "$ARGOCD_CHART_VERSION" \
-    --values "$REPO_ROOT/gitops/argocd/install/values.yaml" \
-    --wait \
-    --timeout 10m; then
-    success "ArgoCD installed on attempt ${attempt}."
-    break
-  fi
-
-  if [[ $attempt -eq $MAX_HELM_ATTEMPTS ]]; then
-    fatal "ArgoCD Helm install failed after ${MAX_HELM_ATTEMPTS} attempts. Check: kubectl get pods -n argocd"
-  fi
-
-  warn "  Attempt ${attempt} failed. Cleaning up before retry..."
-  # Delete any failed pre-install hooks/jobs that block the next attempt
-  kubectl delete jobs -n "$ARGOCD_NAMESPACE" --all --ignore-not-found 2>/dev/null || true
-  sleep 10
-done
-
-# ---------------------------------------------------------------------------
-# Step 5 — Register GitHub repo and apply App-of-Apps
-# ---------------------------------------------------------------------------
-info "Step 5/5 — Registering GitHub repo with ArgoCD..."
-
-# Wait for ArgoCD server to be ready
-kubectl wait --for=condition=available deployment/argocd-server \
-  -n "$ARGOCD_NAMESPACE" --timeout=180s
-
-# Patch the App-of-Apps YAML with the actual repo URL and apply
-APP_OF_APPS="$REPO_ROOT/gitops/argocd/apps/velora-app-of-apps.yaml"
-if grep -q "YOUR_USERNAME" "$APP_OF_APPS"; then
-  warn "App-of-Apps still has YOUR_USERNAME placeholder."
-  warn "Replace it with your GitHub username first, then re-run this script."
-  warn "Or set GITHUB_REPO and run:"
-  warn "  GITHUB_REPO=${GITHUB_REPO} ./scripts/bootstrap.sh"
-else
-  kubectl apply -f "$APP_OF_APPS"
-  success "App-of-Apps applied — ArgoCD will now sync all workloads."
-fi
+info "Step 4/4 — Installing ArgoCD & applying App-of-Apps..."
+"$SCRIPT_DIR/install-argocd.sh"
 
 # ---------------------------------------------------------------------------
 # Credentials & Access Info

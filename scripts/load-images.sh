@@ -72,3 +72,6 @@ done
 echo ""
 success "All images loaded into Kind nodes successfully!"
 echo "Pods will now start instantly using local image cache."
+echo ""
+echo "Next step: install ArgoCD & apply App-of-Apps with:"
+echo "  ./scripts/install-argocd.sh"

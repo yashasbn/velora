@@ -141,7 +141,7 @@ go version           # Go compiler
 
 You can initialize the Velora platform using either the **3-step modular workflow** or the **all-in-one bootstrap script**.
 
-### Option A: 3-Step Modular Setup (Recommended for Step-by-Step Control)
+### Option A: 4-Step Modular Setup (Recommended for Step-by-Step Control)
 
 ```bash
 cd /mnt/c/Projects/velora
@@ -155,6 +155,9 @@ chmod +x scripts/*.sh
 
 # Step 3: Load pre-downloaded images into Kind cluster nodes
 ./scripts/load-images.sh
+
+# Step 4: Install ArgoCD via Helm and apply App-of-Apps
+./scripts/install-argocd.sh
 ```
 
 ### Option B: All-in-One Automated Bootstrap
@@ -163,14 +166,15 @@ chmod +x scripts/*.sh
 cd /mnt/c/Projects/velora
 chmod +x scripts/*.sh
 
-# Runs Step 1 -> Step 2 -> Step 3 + installs ArgoCD via Helm and applies App-of-Apps
+# Runs Step 1 -> Step 2 -> Step 3 -> Step 4 automatically
 ./scripts/bootstrap.sh
 ```
 
 The setup sequence ensures:
 1. **Host Image Cache**: Downloads images to host first (`pull-images.sh`), preventing network timeouts inside Kind containers.
 2. **Cluster Creation**: Provisions `velora` cluster with Terraform (`create-cluster.sh`) and tunes MTU/MSS for WSL2 compatibility.
-3. **Instant Pod Startup**: Pre-loads images into cluster nodes (`load-images.sh`) so ArgoCD, Airflow, Postgres, and MinIO start instantly.
+3. **Instant Pod Startup**: Pre-loads images into cluster nodes (`load-images.sh`) so workloads start instantly from local cache.
+4. **GitOps Deployment**: Installs ArgoCD via Helm and applies App-of-Apps (`install-argocd.sh`).
 
 ### 2. Access Dashboards (Port Forwarding)
 
