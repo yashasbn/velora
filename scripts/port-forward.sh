@@ -16,6 +16,7 @@ info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
 ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
 fatal() { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 
+export PATH=$PATH:/snap/bin:/usr/local/go/bin:$HOME/go/bin
 SERVICE="${1:-all}"
 KUBECONFIG="${KUBECONFIG:-$HOME/.kube/velora-config}"
 export KUBECONFIG
@@ -25,7 +26,7 @@ pf() {
   info "Port-forwarding ${name}: http://localhost:${local_port}"
   (
     while true; do
-      kubectl port-forward "svc/${svc}" "${local_port}:${remote_port}" -n "${ns}"
+      kubectl port-forward "svc/${svc}" "${local_port}:${remote_port}" -n "${ns}" || true
       sleep 2
     done
   ) &
