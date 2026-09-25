@@ -25,13 +25,25 @@ pf() {
   local name=$1 ns=$2 svc=$3 local_port=$4 remote_port=$5
   info "Port-forwarding ${name}: http://localhost:${local_port}"
   (
+    # Wait until at least one pod behind the service is Running (max 5 min)
+    local waited=0
+    while ! kubectl get endpoints "${svc}" -n "${ns}" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null | grep -q .; do
+      if [[ $waited -ge 300 ]]; then
+        echo -e "${YELLOW}[WARN]${NC}  ${name}: timed out waiting for pods — will keep retrying"
+        break
+      fi
+      sleep 5
+      ((waited+=5)) || true
+    done
+
     while true; do
-      kubectl port-forward "svc/${svc}" "${local_port}:${remote_port}" -n "${ns}" || true
-      sleep 2
+      kubectl port-forward "svc/${svc}" "${local_port}:${remote_port}" -n "${ns}" 2>/dev/null || true
+      sleep 3
     done
   ) &
   echo $! >> /tmp/velora-pf-pids
 }
+
 
 cleanup() {
   if [[ -f /tmp/velora-pf-pids ]]; then

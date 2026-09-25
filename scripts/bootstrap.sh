@@ -76,52 +76,17 @@ kubectl get nodes
 success "kubectl is configured."
 
 # ---------------------------------------------------------------------------
-# Step 3 — Pre-load ArgoCD images into kind cluster
+# Step 3 — Pre-load container images into kind cluster
 #
-# WHY: kind nodes pull images from the internet via containerd. On slow or
-#      flaky connections this causes TLS handshake timeouts against quay.io,
-#      which makes the Helm --wait flag fail.  By pulling images on the Docker
-#      host first (which has better networking/caching) and then loading them
-#      into kind, we guarantee the images are available before Helm runs.
+# WHY: kind nodes pull images from upstream registries via containerd. On slow
+#      or flaky connections this causes TLS handshake timeouts, leading to
+#      ImagePullBackOff and Helm timeouts. Pre-pulling on the Docker host and
+#      loading into kind ensures all images are instantly available.
 # ---------------------------------------------------------------------------
-info "Step 3/6 — Pre-loading ArgoCD images into kind cluster..."
-
-ARGOCD_IMAGES=(
-  "quay.io/argoproj/argocd:${ARGOCD_APP_VERSION}"
-  "ghcr.io/dexidp/dex:v2.38.0"
-  "public.ecr.aws/docker/library/redis:7.2.4-alpine"
-)
-
-for img in "${ARGOCD_IMAGES[@]}"; do
-  info "  Pulling ${img} on Docker host..."
-  # Pull with retries — network can be flaky
-  for attempt in 1 2 3; do
-    if docker pull "$img" 2>/dev/null; then
-      success "  Pulled ${img}"
-      break
-    fi
-    if [[ $attempt -eq 3 ]]; then
-      warn "  Could not pull ${img} after 3 attempts — will rely on in-cluster pull."
-    else
-      warn "  Pull attempt ${attempt} failed, retrying in 5s..."
-      sleep 5
-    fi
-  done
-done
-
-# Load all images into kind in one batch (faster than one-by-one)
-info "  Loading images into kind cluster nodes..."
-for img in "${ARGOCD_IMAGES[@]}"; do
-  if docker image inspect "$img" &>/dev/null; then
-    kind load docker-image "$img" --name "${CLUSTER_NAME}" 2>/dev/null || {
-      # Fallback: manual docker save | ctr import
-      warn "  kind load failed for ${img}, using manual ctr import..."
-      NODE_NAME="${CLUSTER_NAME}-control-plane"
-      docker save "$img" | docker exec -i "$NODE_NAME" ctr -n k8s.io images import - 2>/dev/null || true
-    }
-  fi
-done
-success "Images pre-loaded into kind cluster."
+info "Step 3/6 — Pre-loading stack images into kind cluster..."
+chmod +x "$SCRIPT_DIR/preload-images.sh"
+"$SCRIPT_DIR/preload-images.sh" "${CLUSTER_NAME}"
+success "All stack images loaded into kind cluster."
 
 # ---------------------------------------------------------------------------
 # Step 4 — Install ArgoCD via Helm (with retry logic)
