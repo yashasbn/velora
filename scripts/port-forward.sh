@@ -11,9 +11,10 @@
 # =============================================================================
 set -euo pipefail
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
 ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 fatal() { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 
 export PATH=$PATH:/snap/bin:/usr/local/go/bin:$HOME/go/bin
@@ -29,7 +30,7 @@ pf() {
     local waited=0
     while ! kubectl get endpoints "${svc}" -n "${ns}" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null | grep -q .; do
       if [[ $waited -ge 300 ]]; then
-        echo -e "${YELLOW}[WARN]${NC}  ${name}: timed out waiting for pods — will keep retrying"
+        warn "${name}: timed out waiting for pods — will keep retrying"
         break
       fi
       sleep 5
