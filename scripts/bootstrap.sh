@@ -6,11 +6,10 @@
 # Run this from inside WSL2 after completing the prerequisite tool installs.
 # It will:
 #   1. Provision the kind cluster via Terraform
-#   2. Pre-load container images into kind (prevents pull timeouts)
-#   3. Install ArgoCD via Helm (with retry logic)
-#   4. Register the GitHub repo with ArgoCD
-#   5. Apply the App-of-Apps ApplicationCR
-#   6. Print access URLs and credentials
+#   2. Configure kubectl
+#   3. Tune cluster network MTU/MSS for WSL2 compatibility
+#   4. Install ArgoCD via Helm
+#   5. Register GitHub repo and apply App-of-Apps
 #
 # Usage:
 #   chmod +x scripts/bootstrap.sh
@@ -76,22 +75,19 @@ kubectl get nodes
 success "kubectl is configured."
 
 # ---------------------------------------------------------------------------
-# Step 3 — Pre-load container images into kind cluster
-#
-# WHY: kind nodes pull images from upstream registries via containerd. On slow
-#      or flaky connections this causes TLS handshake timeouts, leading to
-#      ImagePullBackOff and Helm timeouts. Pre-pulling on the Docker host and
-#      loading into kind ensures all images are instantly available.
+# Step 3 — Tune kind node network MTU & MSS (WSL2 networking compatibility)
 # ---------------------------------------------------------------------------
-info "Step 3/6 — Pre-loading stack images into kind cluster..."
-chmod +x "$SCRIPT_DIR/preload-images.sh"
-"$SCRIPT_DIR/preload-images.sh" "${CLUSTER_NAME}"
-success "All stack images loaded into kind cluster."
+info "Step 3/5 — Tuning kind cluster networking..."
+for node in $(kind get nodes --name "${CLUSTER_NAME}" 2>/dev/null); do
+  docker exec --privileged "$node" ip link set dev eth0 mtu 1400 2>/dev/null || true
+  docker exec --privileged "$node" iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1360 2>/dev/null || true
+done
+success "Cluster networking tuned."
 
 # ---------------------------------------------------------------------------
-# Step 4 — Install ArgoCD via Helm (with retry logic)
+# Step 4 — Install ArgoCD via Helm
 # ---------------------------------------------------------------------------
-info "Step 4/6 — Installing ArgoCD (chart v${ARGOCD_CHART_VERSION})..."
+info "Step 4/5 — Installing ArgoCD (chart v${ARGOCD_CHART_VERSION})..."
 helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 helm repo update argo
 
@@ -125,7 +121,7 @@ done
 # ---------------------------------------------------------------------------
 # Step 5 — Register GitHub repo and apply App-of-Apps
 # ---------------------------------------------------------------------------
-info "Step 5/6 — Registering GitHub repo with ArgoCD..."
+info "Step 5/5 — Registering GitHub repo with ArgoCD..."
 
 # Wait for ArgoCD server to be ready
 kubectl wait --for=condition=available deployment/argocd-server \
@@ -144,9 +140,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 6 — Print access info
+# Credentials & Access Info
 # ---------------------------------------------------------------------------
-info "Step 6/6 — Gathering access credentials..."
+info "Gathering access credentials..."
 ARGOCD_PASSWORD=$(kubectl get secret argocd-initial-admin-secret \
   -n "$ARGOCD_NAMESPACE" \
   -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo "<run: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d>")
