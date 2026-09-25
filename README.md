@@ -81,54 +81,104 @@ graph TD
 ---
 
 
-## Setup & Bootstrap (Phase 1)
+## Environment Setup
 
 > [!IMPORTANT]
-> **Execution Environment (WSL2 Ubuntu Required):**
+> **Execution Environment — WSL2 Ubuntu Required:**
 > Velora's infrastructure scripts, Kubernetes tooling, Makefiles, and port-forwarding daemons require a Linux POSIX environment.
 > On Windows machines, **ALL commands and scripts MUST be executed inside WSL2 Ubuntu**, never in Windows PowerShell or CMD.
->
-> Open your Ubuntu terminal and navigate to the project directory:
-> ```bash
-> cd /mnt/c/Projects/velora
-> ```
 
-Ensure you have completed the [WSL2 Ubuntu Prerequisite Setup](docs/implementation_plan.md) (Docker, Go 1.22+, Terraform, Helm, kubectl, kind, and kubebuilder installed inside WSL2).
+### Prerequisites
+
+Install the following tools **inside WSL2 Ubuntu** (not Windows):
+
+| Tool | Min Version | Install Guide |
+|------|-------------|---------------|
+| **Docker Desktop** | 24.x | [docs.docker.com](https://docs.docker.com/desktop/install/windows-install/) — enable WSL2 backend |
+| **Go** | 1.22+ | `sudo snap install go --classic` or [go.dev/dl](https://go.dev/dl/) |
+| **Terraform** | 1.6+ | `sudo snap install terraform --classic` |
+| **Helm** | 3.x | `sudo snap install helm --classic` |
+| **kubectl** | 1.30+ | `sudo snap install kubectl --classic` |
+| **kind** | 0.23+ | `go install sigs.k8s.io/kind@latest` |
+| **kubebuilder** | 4.x | `go install sigs.k8s.io/kubebuilder/cmd@latest` |
+
+### Configure Your Shell
+
+Add these to your `~/.bashrc` (or `~/.zshrc`) so kubectl and Go binaries are always found:
+
+```bash
+# Velora environment
+export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin:/snap/bin
+export KUBECONFIG=$HOME/.kube/velora-config
+```
+
+Then reload:
+```bash
+source ~/.bashrc
+```
+
+### Verify Your Environment
+
+```bash
+# Navigate to the project
+cd /mnt/c/Projects/velora
+
+# Verify all tools are available
+docker info          # Docker daemon is running
+kind version         # kind CLI
+kubectl version --client  # kubectl CLI
+helm version         # Helm CLI
+terraform version    # Terraform CLI
+go version           # Go compiler
+```
+
+---
+
+## Setup & Bootstrap (Phase 1)
 
 ### 1. Initialize & Start the Platform
+
 Run the bootstrap script inside your **WSL2** environment:
 ```bash
 cd /mnt/c/Projects/velora
-chmod +x scripts/bootstrap.sh scripts/*.sh
+chmod +x scripts/*.sh
 ./scripts/bootstrap.sh
 ```
 
+The bootstrap script will:
+1. Provision a `kind` cluster via Terraform
+2. Pre-load ArgoCD container images (prevents network timeout failures)
+3. Install ArgoCD via Helm (with automatic retry on failure)
+4. Register the GitHub repo and apply the App-of-Apps
+5. Print access credentials
+
 ### 2. Access Dashboards (Port Forwarding)
-Run the port-forward script in a **dedicated WSL2 terminal window/tab** (it runs in the background and auto-reconnects):
+
+Run the port-forward script in a **dedicated WSL2 terminal window/tab**:
 ```bash
-# Run inside WSL2:
 cd /mnt/c/Projects/velora
 ./scripts/port-forward.sh all
 ```
 
-Once running, access the services from your Windows browser:
-- **ArgoCD**: [http://localhost:30080](http://localhost:30080)
-  - Username: `admin`
-  - Password: run the following inside WSL2:
-    ```bash
-    export KUBECONFIG=~/.kube/velora-config
-    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-    ```
-- **Airflow**: [http://localhost:30081](http://localhost:30081)
-- **MinIO Console**: [http://localhost:30090](http://localhost:30090) (velora / velora-minio-secret)
-- **Grafana**: [http://localhost:30300](http://localhost:30300)
+Once running, access services from your Windows browser:
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| **ArgoCD** | [http://localhost:30080](http://localhost:30080) | `admin` / see below |
+| **Airflow** | [http://localhost:30081](http://localhost:30081) | default |
+| **MinIO Console** | [http://localhost:30090](http://localhost:30090) | `velora` / `velora-minio-secret` |
+| **Grafana** | [http://localhost:30300](http://localhost:30300) | default |
+
+**Get ArgoCD admin password:**
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+```
 
 ### 3. Build & Deploy the Operator (Phase 2)
 
-Since the Velora Operator is custom-built and not pushed to a public Docker registry during local development, build and load its Docker image into your `kind` cluster from inside **WSL2**:
+The Velora Operator is custom-built and not pushed to a public registry. Build and load it into kind:
 
 ```bash
-# Run inside WSL2:
 cd /mnt/c/Projects/velora/operator
 make docker-build
 kind load docker-image ghcr.io/yashasbn/velora-operator:latest --name velora
@@ -138,13 +188,47 @@ Once loaded, ArgoCD will automatically detect the image and start the `velora-op
 
 ---
 
-## Teardown
+## Cluster Recovery
 
-To stop everything and return to a clean state, run from inside your **WSL2 Ubuntu** shell:
+If you see `connection refused` errors from `kubectl`:
+```
+dial tcp 127.0.0.1:XXXXX: connect: connection refused
+```
+
+This means the kind cluster is not running. Common causes:
+- Docker Desktop was restarted
+- WSL2 was rebooted
+- The cluster was accidentally deleted
+
+**To fix:**
 
 ```bash
-export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+# 1. Make sure Docker is running
+docker info
 
+# 2. Check if the kind cluster still exists
+kind get clusters
+
+# 3a. If "velora" is listed — the cluster exists but may need a restart:
+#     Docker restart usually recovers it. Just wait ~30s after Docker starts.
+docker restart velora-control-plane 2>/dev/null || true
+docker restart velora-worker 2>/dev/null || true
+docker restart velora-worker2 2>/dev/null || true
+sleep 10
+kubectl cluster-info
+
+# 3b. If "velora" is NOT listed — re-bootstrap from scratch:
+cd /mnt/c/Projects/velora
+./scripts/bootstrap.sh
+```
+
+---
+
+## Teardown
+
+To stop everything and return to a clean state:
+
+```bash
 # Delete the kind cluster (all pods, nodes, namespaces)
 kind delete cluster --name velora
 
@@ -160,15 +244,18 @@ rm -f terraform.tfstate terraform.tfstate.backup .terraform.lock.hcl
 
 ## Troubleshooting
 
-Hit an error? See **[docs/troubleshooting.md](docs/troubleshooting.md)** for a full list of known issues and fixes, including:
+Hit an error? See **[docs/troubleshooting.md](docs/troubleshooting.md)** for known issues and fixes:
 
-- `env: $'bash\r': No such file or directory` — CRLF line ending issue fixed via `.gitattributes`. Ensure you edit files with LF line endings.
-- `chmod` not recognized (running in PowerShell instead of WSL2).
-- `kind` / `helm` not found in PATH.
-- Terraform checksum verification failure.
-- Docker permission denied inside WSL.
-- ArgoCD SSL certificate error connecting to GitHub.
-- Wrong WSL distribution (`docker-desktop` vs `Ubuntu`).
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `env: $'bash\r': No such file or directory` | CRLF line endings | Fixed via `.gitattributes`. Re-clone or run `dos2unix` on scripts |
+| `chmod` not recognized | Running in PowerShell | Switch to WSL2 Ubuntu |
+| `kind` / `helm` not found | Missing from PATH | Add `/snap/bin` and `$HOME/go/bin` to PATH |
+| `connection refused` on kubectl | Cluster not running | See **Cluster Recovery** above |
+| `timed out waiting for the condition` | Image pull timeout | Bootstrap now pre-loads images; re-run `./scripts/bootstrap.sh` |
+| Docker permission denied | User not in docker group | `sudo usermod -aG docker $USER` then re-login |
+| ArgoCD SSL certificate error | Repo secret misconfigured | Check `gitops/argocd/install/repo-secret.yaml` has `insecure: "true"` |
+| Wrong WSL distro (`docker-desktop`) | Default WSL not Ubuntu | `wsl --set-default Ubuntu` |
 
 ---
 
