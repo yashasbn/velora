@@ -14,8 +14,8 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin:/snap/bin
-export KUBECONFIG=$HOME/.kube/velora-config
+export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin:/snap/bin"
+export KUBECONFIG="$HOME/.kube/velora-config"
 
 echo -e "\033[0;36m[velora]\033[0m  Environment loaded (this session only)"
 echo "  KUBECONFIG=$KUBECONFIG"

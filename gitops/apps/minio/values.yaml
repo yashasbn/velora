@@ -11,7 +11,7 @@
 mode: standalone
 
 image:
-  repository: minio/minio
+  repository: cgr.dev/chainguard/minio
   tag: latest
   pullPolicy: IfNotPresent
 

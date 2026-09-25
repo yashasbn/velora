@@ -12,12 +12,13 @@
 set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+export RED GREEN YELLOW CYAN NC
 info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
 ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 fatal() { echo -e "${RED}[FAIL]${NC}  $*"; exit 1; }
 
-export PATH=$PATH:/snap/bin:/usr/local/go/bin:$HOME/go/bin
+export PATH="$PATH:/snap/bin:/usr/local/go/bin:$HOME/go/bin"
 SERVICE="${1:-all}"
 KUBECONFIG="${KUBECONFIG:-$HOME/.kube/velora-config}"
 export KUBECONFIG

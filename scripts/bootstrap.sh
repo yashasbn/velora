@@ -18,7 +18,7 @@
 set -euo pipefail
 
 # Ensure Go and user Go bin paths are included in PATH (handles WSL non-login shells)
-export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin:/snap/bin:/usr/local/bin
+export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin:/snap/bin:/usr/local/bin"
 
 # ---------------------------------------------------------------------------
 # Colours for readable output
@@ -55,34 +55,22 @@ docker info &>/dev/null || fatal "Docker daemon is not running. Start Docker Des
 success "All tools found and Docker is running."
 
 # ---------------------------------------------------------------------------
-# Step 1 — Terraform: provision kind cluster
+# Step 1/5 — Pre-download images to host
 # ---------------------------------------------------------------------------
-info "Step 1/6 — Provisioning kind cluster '${CLUSTER_NAME}' via Terraform..."
-cd "$REPO_ROOT/infra/terraform"
-terraform init -upgrade -input=false
-terraform apply -auto-approve \
-  -var="cluster_name=${CLUSTER_NAME}" \
-  -var="kubeconfig_path=${KUBECONFIG_PATH}"
-success "Kind cluster '${CLUSTER_NAME}' is ready."
+info "Step 1/5 — Pre-downloading container images..."
+"$SCRIPT_DIR/pull-images.sh"
 
 # ---------------------------------------------------------------------------
-# Step 2 — Configure kubectl
+# Step 2/5 — Provision kind cluster & tune networking
 # ---------------------------------------------------------------------------
-info "Step 2/6 — Configuring kubectl..."
-export KUBECONFIG="${KUBECONFIG_PATH}"
-kubectl cluster-info
-kubectl get nodes
-success "kubectl is configured."
+info "Step 2/5 — Provisioning Kind cluster '${CLUSTER_NAME}'..."
+"$SCRIPT_DIR/create-cluster.sh"
 
 # ---------------------------------------------------------------------------
-# Step 3 — Tune kind node network MTU & MSS (WSL2 networking compatibility)
+# Step 3/5 — Load images into Kind nodes
 # ---------------------------------------------------------------------------
-info "Step 3/5 — Tuning kind cluster networking..."
-for node in $(kind get nodes --name "${CLUSTER_NAME}" 2>/dev/null); do
-  docker exec --privileged "$node" ip link set dev eth0 mtu 1400 2>/dev/null || true
-  docker exec --privileged "$node" iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1360 2>/dev/null || true
-done
-success "Cluster networking tuned."
+info "Step 3/5 — Loading pre-downloaded images into Kind nodes..."
+"$SCRIPT_DIR/load-images.sh"
 
 # ---------------------------------------------------------------------------
 # Step 4 — Install ArgoCD via Helm

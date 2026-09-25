@@ -139,21 +139,38 @@ go version           # Go compiler
 
 ## Setup & Bootstrap (Phase 1)
 
-### 1. Initialize & Start the Platform
+You can initialize the Velora platform using either the **3-step modular workflow** or the **all-in-one bootstrap script**.
 
-Run the bootstrap script inside your **WSL2** environment:
+### Option A: 3-Step Modular Setup (Recommended for Step-by-Step Control)
+
 ```bash
 cd /mnt/c/Projects/velora
 chmod +x scripts/*.sh
+
+# Step 1: Pre-download all 14 container images to local Docker host
+./scripts/pull-images.sh
+
+# Step 2: Provision the 'velora' Kind cluster via Terraform and tune network MTU
+./scripts/create-cluster.sh
+
+# Step 3: Load pre-downloaded images into Kind cluster nodes
+./scripts/load-images.sh
+```
+
+### Option B: All-in-One Automated Bootstrap
+
+```bash
+cd /mnt/c/Projects/velora
+chmod +x scripts/*.sh
+
+# Runs Step 1 -> Step 2 -> Step 3 + installs ArgoCD via Helm and applies App-of-Apps
 ./scripts/bootstrap.sh
 ```
 
-The bootstrap script will:
-1. Provision a `kind` cluster via Terraform
-2. Pre-load ArgoCD container images (prevents network timeout failures)
-3. Install ArgoCD via Helm (with automatic retry on failure)
-4. Register the GitHub repo and apply the App-of-Apps
-5. Print access credentials
+The setup sequence ensures:
+1. **Host Image Cache**: Downloads images to host first (`pull-images.sh`), preventing network timeouts inside Kind containers.
+2. **Cluster Creation**: Provisions `velora` cluster with Terraform (`create-cluster.sh`) and tunes MTU/MSS for WSL2 compatibility.
+3. **Instant Pod Startup**: Pre-loads images into cluster nodes (`load-images.sh`) so ArgoCD, Airflow, Postgres, and MinIO start instantly.
 
 ### 2. Access Dashboards (Port Forwarding)
 
@@ -234,6 +251,9 @@ To stop everything and return to a clean state:
 ```bash
 # Delete the kind cluster (all pods, nodes, namespaces)
 kind delete cluster --name velora
+
+# Clean up downloaded container images from host & nodes
+./scripts/clean-images.sh
 
 # Remove kubeconfig
 rm -f ~/.kube/velora-config
