@@ -83,22 +83,35 @@ graph TD
 
 ## Setup & Bootstrap (Phase 1)
 
+> [!IMPORTANT]
+> **Execution Environment (WSL2 Ubuntu Required):**
+> Velora's infrastructure scripts, Kubernetes tooling, Makefiles, and port-forwarding daemons require a Linux POSIX environment.
+> On Windows machines, **ALL commands and scripts MUST be executed inside WSL2 Ubuntu**, never in Windows PowerShell or CMD.
+>
+> Open your Ubuntu terminal and navigate to the project directory:
+> ```bash
+> cd /mnt/c/Projects/velora
+> ```
+
 Ensure you have completed the [WSL2 Ubuntu Prerequisite Setup](docs/implementation_plan.md) (Docker, Go 1.22+, Terraform, Helm, kubectl, kind, and kubebuilder installed inside WSL2).
 
 ### 1. Initialize & Start the Platform
-Run the bootstrap script inside your WSL2 environment:
+Run the bootstrap script inside your **WSL2** environment:
 ```bash
-chmod +x scripts/bootstrap.sh
+cd /mnt/c/Projects/velora
+chmod +x scripts/bootstrap.sh scripts/*.sh
 ./scripts/bootstrap.sh
 ```
 
-### 2. Access Dashboards
-To forward all platform services, run:
+### 2. Access Dashboards (Port Forwarding)
+Run the port-forward script in a **dedicated WSL2 terminal window/tab** (it runs in the background and auto-reconnects):
 ```bash
+# Run inside WSL2:
+cd /mnt/c/Projects/velora
 ./scripts/port-forward.sh all
 ```
 
-Access URLs:
+Once running, access the services from your Windows browser:
 - **ArgoCD**: [http://localhost:30080](http://localhost:30080)
   - Username: `admin`
   - Password: run the following inside WSL2:
@@ -107,15 +120,16 @@ Access URLs:
     kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
     ```
 - **Airflow**: [http://localhost:30081](http://localhost:30081)
-- **MinIO**: [http://localhost:30090](http://localhost:30090) (velora / velora-minio-secret)
+- **MinIO Console**: [http://localhost:30090](http://localhost:30090) (velora / velora-minio-secret)
 - **Grafana**: [http://localhost:30300](http://localhost:30300)
 
 ### 3. Build & Deploy the Operator (Phase 2)
 
-Since the Velora Operator is custom-built and not pushed to a public Docker registry during local development, you must manually build and load its Docker image into your `kind` cluster:
+Since the Velora Operator is custom-built and not pushed to a public Docker registry during local development, build and load its Docker image into your `kind` cluster from inside **WSL2**:
 
 ```bash
-cd operator
+# Run inside WSL2:
+cd /mnt/c/Projects/velora/operator
 make docker-build
 kind load docker-image ghcr.io/yashasbn/velora-operator:latest --name velora
 ```
@@ -148,9 +162,16 @@ rm -f terraform.tfstate terraform.tfstate.backup .terraform.lock.hcl
 
 Hit an error? See **[docs/troubleshooting.md](docs/troubleshooting.md)** for a full list of known issues and fixes, including:
 
-- `chmod` not recognized (running in PowerShell instead of WSL2)
-- `kind` / `helm` not found in PATH
-- Terraform checksum verification failure
-- Docker permission denied
-- ArgoCD SSL certificate error connecting to GitHub
-- Wrong WSL distribution (`docker-desktop` vs `Ubuntu`)
+- `env: $'bash\r': No such file or directory` — CRLF line ending issue fixed via `.gitattributes`. Ensure you edit files with LF line endings.
+- `chmod` not recognized (running in PowerShell instead of WSL2).
+- `kind` / `helm` not found in PATH.
+- Terraform checksum verification failure.
+- Docker permission denied inside WSL.
+- ArgoCD SSL certificate error connecting to GitHub.
+- Wrong WSL distribution (`docker-desktop` vs `Ubuntu`).
+
+---
+
+## License
+
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)** — see the [LICENSE](LICENSE) file for details.
