@@ -14,6 +14,7 @@ CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 PHASE="${1:-}"
 [[ -z "$PHASE" ]] && { echo "Usage: $0 <phase>  (1–6)"; exit 1; }
 
+export PATH=$PATH:/snap/bin:/usr/local/go/bin:$HOME/go/bin
 KUBECONFIG="${KUBECONFIG:-$HOME/.kube/velora-config}"
 export KUBECONFIG
 
