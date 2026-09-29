@@ -19,7 +19,7 @@ spec:
   source:
     # TODO: Replace with your actual GitHub repo URL before bootstrapping
     repoURL: https://github.com/yashasbn/velora.git
-    targetRevision: HEAD
+    targetRevision: fix/bootstrap-reliability
     path: gitops/apps
 
   destination:

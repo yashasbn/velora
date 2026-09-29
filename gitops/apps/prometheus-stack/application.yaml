@@ -18,7 +18,7 @@ spec:
         valueFiles:
           - $values/gitops/apps/prometheus-stack/values.yaml
     - repoURL: https://github.com/yashasbn/velora.git
-      targetRevision: HEAD
+      targetRevision: fix/bootstrap-reliability
       ref: values
 
   destination:

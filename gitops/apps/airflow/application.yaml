@@ -20,7 +20,7 @@ spec:
         valueFiles:
           - $values/gitops/apps/airflow/values.yaml
     - repoURL: https://github.com/yashasbn/velora.git
-      targetRevision: HEAD
+      targetRevision: fix/bootstrap-reliability
       ref: values
 
   destination:

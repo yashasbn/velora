@@ -11,7 +11,7 @@ spec:
 
   source:
     repoURL: https://github.com/yashasbn/velora.git
-    targetRevision: HEAD
+    targetRevision: fix/bootstrap-reliability
     path: helm/velora-operator
     helm:
       releaseName: velora-operator
