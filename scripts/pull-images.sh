@@ -82,6 +82,7 @@ IMAGES=(
 
   # MinIO storage
   "cgr.dev/chainguard/minio:latest"
+  "quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z"
 
   # Airflow & Database
   "apache/airflow:2.9.3"
