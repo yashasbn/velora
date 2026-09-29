@@ -26,8 +26,8 @@ postgresql:
   enabled: true
   image:
     registry: docker.io
-    repository: library/postgres
-    tag: "16-alpine"
+    repository: bitnami/postgresql
+    tag: "latest"
   auth:
     username: airflow
     password: airflow
