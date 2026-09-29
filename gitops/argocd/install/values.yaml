@@ -8,6 +8,11 @@
 
 global:
   domain: argocd.velora.local
+  # Pin all components to the exact version pre-loaded into Kind nodes via pull-images.sh.
+  # Without this, chart 10.2.2 defaults application-controller to v3.4.6 which is not
+  # cached and causes ImagePullBackOff (quay.io TLS timeout in WSL2).
+  image:
+    tag: "v2.14.11"
 
 ## ArgoCD server
 server:

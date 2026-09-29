@@ -53,15 +53,23 @@ with open('$cfg', 'w') as f: json.dump(c, f, indent=2); f.write('\n')
   success "Docker Hub mirror configured and daemon restarted."
 }
 
-# Run mirror setup (needs root for daemon.json + restart)
-if ! docker info 2>/dev/null | grep -q 'mirror.gcr.io'; then
-  if [ "$(id -u)" -eq 0 ]; then
-    ensure_mirror
-  else
-    warn "Docker Hub mirror not configured. Configuring with sudo..."
-    sudo bash -c "$(declare -f ensure_mirror success info warn); ensure_mirror"
+# ---------------------------------------------------------------------------
+# Ensure quay.io connectivity (handles WSL2 unroutable IPv6 / MTU issues)
+# ---------------------------------------------------------------------------
+ensure_quay_route() {
+  if ! curl -s --connect-timeout 4 -o /dev/null -w "%{http_code}" https://quay.io/v2/ 2>/dev/null | grep -q "401"; then
+    info "Detected quay.io timeout (WSL2 IPv6/MTU route bug). Auto-configuring reliable endpoint..."
+    if [ "$(id -u)" -eq 0 ]; then
+      sysctl -w net.ipv6.conf.all.disable_ipv6=1 -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
+      grep -q 'quay.io' /etc/hosts || echo '34.233.240.53 quay.io' >> /etc/hosts
+    else
+      sudo bash -c "sysctl -w net.ipv6.conf.all.disable_ipv6=1 -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true; grep -q 'quay.io' /etc/hosts || echo '34.233.240.53 quay.io' >> /etc/hosts" 2>/dev/null || true
+    fi
   fi
-fi
+}
+
+ensure_quay_route
+
 
 # ---------------------------------------------------------------------------
 # Image list
@@ -78,6 +86,7 @@ IMAGES=(
   # Airflow & Database
   "apache/airflow:2.9.3"
   "postgres:16-alpine"
+  "docker.io/bitnami/postgresql:latest"
 
   # Prometheus stack & Grafana
   "quay.io/prometheus/prometheus:v2.53.0"

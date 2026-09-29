@@ -311,3 +311,22 @@ Helm uses a 5-minute timeout (`--timeout 5m`) by default for the ArgoCD installa
 
 **Fix**  
 The image pull actually continues in the background. Wait a few more minutes for the pull to finish, and simply re-run `./scripts/bootstrap.sh`. Since the image will now be cached on the cluster node, the installation will proceed instantly.
+
+---
+
+### ❌ Issue 11: `quay.io` TLS handshake timeout during image pull
+
+**Symptom**
+```
+Error response from daemon: Get "https://quay.io/v2/": net/http: TLS handshake timeout
+```
+
+**Root Cause**  
+WSL2 running in standard NAT mode inherits dual-stack IPv4/IPv6 DNS records from the Windows host, but lacks a valid outbound IPv6 route. Go/Docker's Happy Eyeballs algorithm attempts the unroutable IPv6 addresses first, causing connection attempts to `quay.io` to hang until the client timeout triggers.
+
+**Fix**  
+`scripts/pull-images.sh` now automatically runs `ensure_quay_route` to disable unreachable IPv6 routes and pin a validated IPv4 endpoint for `quay.io`. You can also prevent this globally by enabling mirrored networking in `~/.wslconfig`:
+```ini
+[wsl2]
+networkingMode=mirrored
+```

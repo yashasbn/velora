@@ -3,6 +3,12 @@
 #
 # Tuned for a kind cluster: reduced replicas, small storage, no HA.
 
+prometheusOperator:
+  admissionWebhooks:
+    enabled: false
+    patch:
+      enabled: false
+
 grafana:
   enabled: true
   adminPassword: velora-grafana-admin   # Override in prod via Secret

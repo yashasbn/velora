@@ -34,3 +34,4 @@ spec:
       - ServerSideApply=true
       # CRDs for kube-prometheus-stack are large — replace rather than patch
       - Replace=true
+      - SkipDryRunOnMissingResource=true

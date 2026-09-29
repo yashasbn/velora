@@ -122,18 +122,25 @@ This sets `KUBECONFIG` and `PATH` **only for the current terminal**. Close the t
 
 ### Verify Your Environment
 
-```bash
-# Navigate to the project
-cd /mnt/c/Projects/velora
+Run the verification script to check all tools and display a clean status summary:
 
-# Verify all tools are available
-docker info          # Docker daemon is running
-kind version         # kind CLI
-kubectl version --client  # kubectl CLI
-helm version         # Helm CLI
-terraform version    # Terraform CLI
-go version           # Go compiler
+```bash
+cd /mnt/c/Projects/velora
+./scripts/check-tools.sh
 ```
+
+<details>
+<summary>Or verify tools manually</summary>
+
+```bash
+docker info               # Docker daemon is running
+kind version              # kind CLI
+kubectl version --client  # kubectl CLI
+helm version              # Helm CLI
+terraform version         # Terraform CLI
+go version                # Go compiler
+```
+</details>
 
 ---
 

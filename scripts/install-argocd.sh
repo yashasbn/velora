@@ -34,15 +34,26 @@ info "Installing ArgoCD (chart v${ARGOCD_CHART_VERSION})..."
 helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 helm repo update argo
 
+# Pre-download chart to local cache so helm install never hits the network at runtime.
+# Avoids WSL2 GitHub CDN timeout (same root cause as quay.io IPv6 black hole).
+CHART_CACHE_DIR="${HOME}/.cache/helm/repository"
+CHART_FILE="${CHART_CACHE_DIR}/argo-cd-${ARGOCD_CHART_VERSION}.tgz"
+if [[ ! -f "$CHART_FILE" ]]; then
+  info "Pre-fetching Helm chart argo-cd-${ARGOCD_CHART_VERSION} to local cache..."
+  helm pull argo/argo-cd --version "$ARGOCD_CHART_VERSION" --destination "$CHART_CACHE_DIR"
+  success "Chart cached at ${CHART_FILE}"
+else
+  success "Chart already cached at ${CHART_FILE}"
+fi
+
 kubectl apply -f "$REPO_ROOT/gitops/argocd/install/namespace.yaml"
 kubectl apply -f "$REPO_ROOT/gitops/argocd/install/repo-secret.yaml"
 
 MAX_HELM_ATTEMPTS=3
 for attempt in $(seq 1 $MAX_HELM_ATTEMPTS); do
   info "  Helm install attempt ${attempt}/${MAX_HELM_ATTEMPTS}..."
-  if helm upgrade --install argocd argo/argo-cd \
+  if helm upgrade --install argocd "$CHART_FILE" \
     --namespace "$ARGOCD_NAMESPACE" \
-    --version "$ARGOCD_CHART_VERSION" \
     --values "$REPO_ROOT/gitops/argocd/install/values.yaml" \
     --wait \
     --timeout 10m; then
