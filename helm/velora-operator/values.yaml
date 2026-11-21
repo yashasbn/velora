@@ -33,7 +33,7 @@ metrics:
   port: 8080
   serviceMonitor:
     enabled: true
-    namespace: monitoring
+    namespace: velora-system
     interval: 30s
 
 leaderElection:
