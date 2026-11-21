@@ -310,6 +310,18 @@ Hit an error? See **[docs/troubleshooting.md](docs/troubleshooting.md)** for kno
 
 ---
 
+## Future Work
+
+Planned enhancements and roadmap items for the Velora platform:
+
+- **Multi-Cloud Storage Providers:** Extend `DataPipeline` destination capabilities beyond MinIO to native AWS S3, Google Cloud Storage (GCS), and Azure Blob Storage via pluggable storage drivers.
+- **Automated Self-Healing Controller:** Implement an automated remediation operator loop to handle transient data pipeline failures (e.g. exponential backoff connection retries, auto-restart on OOMKilled).
+- **Notification Webhooks:** Add Slack, Discord, and PagerDuty alert integrations directly in the AI Failure Summarizer service so engineers receive instant natural-language diagnostics in communication channels.
+- **Fine-Grained Multi-Tenancy & RBAC:** Namespace-isolated pipeline definitions with resource quotas, vault-managed secrets injection, and team-based role bindings.
+- **Local LLM Offline Fallback:** Native Ollama / vLLM fallback provider within the cluster for air-gapped environments without external internet connectivity.
+
+---
+
 ## License
 
 This project is licensed under the **GNU General Public License v3.0 (GPLv3)** — see the [LICENSE](LICENSE) file for details.
