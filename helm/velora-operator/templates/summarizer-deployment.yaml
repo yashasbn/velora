@@ -1,0 +1,61 @@
+{{- if .Values.summarizer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velora-summarizer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: velora-summarizer
+    app.kubernetes.io/name: velora-summarizer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: summarizer
+spec:
+  replicas: {{ .Values.summarizer.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      app: velora-summarizer
+  template:
+    metadata:
+      labels:
+        app: velora-summarizer
+        app.kubernetes.io/name: velora-summarizer
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: summarizer
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: summarizer
+          image: "{{ .Values.summarizer.image.repository }}:{{ .Values.summarizer.image.tag }}"
+          imagePullPolicy: {{ .Values.summarizer.image.pullPolicy }}
+          command:
+            - /velora-summarizer
+          args:
+            - --airflow-base-url={{ .Values.airflow.baseURL }}
+            - --airflow-username=admin
+            - --poll-interval={{ .Values.summarizer.pollInterval }}
+            - --llm-provider={{ .Values.summarizer.llmProvider }}
+            {{- if .Values.summarizer.geminiApiKey }}
+            - --gemini-api-key={{ .Values.summarizer.geminiApiKey }}
+            {{- end }}
+            {{- if .Values.summarizer.ollamaEndpoint }}
+            - --ollama-endpoint={{ .Values.summarizer.ollamaEndpoint }}
+            {{- end }}
+          env:
+            - name: AIRFLOW_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.airflow.secretName }}
+                  key: password
+            {{- if .Values.summarizer.geminiApiKeySecret }}
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.summarizer.geminiApiKeySecret }}
+                  key: api-key
+            {{- end }}
+          resources:
+            {{- toYaml .Values.summarizer.resources | nindent 12 }}
+{{- end }}

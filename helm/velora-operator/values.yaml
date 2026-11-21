@@ -39,6 +39,25 @@ metrics:
 leaderElection:
   enabled: false   # Enable in multi-replica HA deployments
 
+summarizer:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/yashasbn/velora-summarizer
+    tag: latest
+    pullPolicy: Never
+  pollInterval: "10s"
+  llmProvider: "mock"
+  geminiApiKey: ""
+  ollamaEndpoint: "http://localhost:11434"
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

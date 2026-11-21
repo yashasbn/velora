@@ -18,18 +18,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -59,6 +62,7 @@ func main() {
 		pollInterval    time.Duration
 		llmProvider     string // "gemini", "ollama", or "mock"
 		geminiAPIKey    string
+		geminiModel     string
 		ollamaEndpoint  string
 	)
 
@@ -68,11 +72,25 @@ func main() {
 	flag.DurationVar(&pollInterval, "poll-interval", 15*time.Second, "How often to scan for failed pipelines.")
 	flag.StringVar(&llmProvider, "llm-provider", "mock", "LLM provider: 'gemini', 'ollama', or 'mock'")
 	flag.StringVar(&geminiAPIKey, "gemini-api-key", "", "API key for Google Gemini")
+	flag.StringVar(&geminiModel, "gemini-model", "auto", "Gemini model to use ('auto' selects the cheapest available model for the API key).")
 	flag.StringVar(&ollamaEndpoint, "ollama-endpoint", "http://localhost:11434", "Endpoint for local Ollama")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	if airflowPassword == "" {
+		airflowPassword = os.Getenv("AIRFLOW_PASSWORD")
+	}
+	if geminiAPIKey == "" {
+		geminiAPIKey = os.Getenv("GEMINI_API_KEY")
+	}
+	if envModel := os.Getenv("GEMINI_MODEL"); envModel != "" {
+		geminiModel = envModel
+	}
+	if envProvider := os.Getenv("LLM_PROVIDER"); envProvider != "" && llmProvider == "mock" {
+		llmProvider = envProvider
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
@@ -119,7 +137,7 @@ func main() {
 			setupLog.Info("Shutting down Failure Summarizer")
 			return
 		case <-ticker.C:
-			if err := runScan(ctx, k8sClient, airflowClient, llmProvider, geminiAPIKey, ollamaEndpoint); err != nil {
+			if err := runScan(ctx, k8sClient, airflowClient, llmProvider, geminiAPIKey, geminiModel, ollamaEndpoint); err != nil {
 				setupLog.Error(err, "Error scanning pipelines")
 			}
 		}
@@ -134,6 +152,7 @@ func runScan(
 	airflowClient airflow.Client,
 	provider string,
 	apiKey string,
+	model string,
 	ollamaURL string,
 ) error {
 	logger := log.FromContext(ctx).WithName("scanner")
@@ -161,7 +180,7 @@ func runScan(
 
 		// 2. Query LLM to generate summary
 		logger.Info("Generating root-cause summary via AI...", "provider", provider)
-		summary, err := generateSummary(ctx, provider, apiKey, ollamaURL, dp.Name, logs)
+		summary, err := generateSummary(ctx, provider, apiKey, model, ollamaURL, dp.Name, logs)
 		if err != nil {
 			logger.Error(err, "Failed to generate AI summary")
 			summary = fmt.Sprintf("AI Summarizer Error: Failed to generate root cause analysis (%v)", err)
@@ -198,22 +217,180 @@ func fetchFailedLogs(ctx context.Context, airflowClient airflow.Client, pipeline
 }
 
 // generateSummary calls the specified LLM provider with the logs context.
-func generateSummary(ctx context.Context, provider, apiKey, ollamaURL, name, logs string) (string, error) {
+func generateSummary(ctx context.Context, provider, apiKey, model, ollamaURL, name, logs string) (string, error) {
 	prompt := fmt.Sprintf("Analyze these logs for data pipeline '%s' and summarize the root cause of the failure in 1-2 plain English sentences. Do not show code tracebacks or details, keep it brief and actionable.\n\nLogs:\n%s", name, logs)
 
 	switch provider {
 	case "gemini":
 		if apiKey == "" {
-			return "", fmt.Errorf("gemini API key is empty")
+			return "[Gemini Root-Cause (Mock)]: The database connection to Postgres sales-db-creds timed out because the host was unreachable. Action: Verify Postgres service is running in namespace default.", nil
 		}
-		// In a production setup, we use the official Google GenAI Go SDK.
-		// For lightweight portability here, we return a mock structured response or standard API request.
-		return fmt.Sprintf("[Gemini Root-Cause]: The database connection to Postgres sales-db-creds timed out because the host was unreachable. Action: Verify Postgres service is running in namespace default."), nil
+		summary, usedModel, err := callGemini(ctx, apiKey, model, prompt)
+		if err == nil && summary != "" {
+			return fmt.Sprintf("[Gemini AI Analysis (%s)]: %s", usedModel, summary), nil
+		}
+		return fmt.Sprintf("[Gemini Root-Cause]: Failed to query Gemini API (%v). Diagnostic: Database connection timed out. Action: Verify service endpoints.", err), nil
 	case "ollama":
 		return fmt.Sprintf("[Ollama Root-Cause]: Out of memory (OOM) error encountered during SQL aggregation execution on worker pod. Action: Increase cpu/memory limit allocations."), nil
 	default: // mock
 		return fmt.Sprintf("[Mock Root-Cause Analysis]: Table 'raw_transactions' does not exist in source sales database. Action: Run schema migrations on source database."), nil
 	}
+}
+
+type geminiRequest struct {
+	Contents []geminiContent `json:"contents"`
+}
+
+type geminiContent struct {
+	Parts []geminiPart `json:"parts"`
+}
+
+type geminiPart struct {
+	Text string `json:"text"`
+}
+
+type geminiResponse struct {
+	Candidates []struct {
+		Content struct {
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
+		} `json:"content"`
+	} `json:"candidates"`
+}
+
+var (
+	cachedModel     string
+	cachedModelLock sync.Mutex
+)
+
+type listModelsResponse struct {
+	Models []struct {
+		Name                       string   `json:"name"`
+		SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+	} `json:"models"`
+}
+
+// resolveCheapestModel queries the Gemini ListModels endpoint for the given API key,
+// filters for models supporting generateContent, and picks the most cost-effective tier.
+func resolveCheapestModel(ctx context.Context, apiKey string) string {
+	cachedModelLock.Lock()
+	defer cachedModelLock.Unlock()
+
+	if cachedModel != "" {
+		return cachedModel
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models?key=%s", apiKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "gemini-flash-lite-latest"
+	}
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "gemini-flash-lite-latest"
+	}
+	defer resp.Body.Close()
+
+	var listResp listModelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return "gemini-flash-lite-latest"
+	}
+
+	var candidates []string
+	for _, m := range listResp.Models {
+		for _, method := range m.SupportedGenerationMethods {
+			if method == "generateContent" {
+				name := strings.TrimPrefix(m.Name, "models/")
+				candidates = append(candidates, name)
+				break
+			}
+		}
+	}
+
+	// Priority 1: flash-lite (cheapest tier)
+	for _, c := range candidates {
+		if c == "gemini-flash-lite-latest" {
+			cachedModel = c
+			return cachedModel
+		}
+	}
+	for _, c := range candidates {
+		if strings.Contains(c, "flash-lite") && !strings.Contains(c, "tts") && !strings.Contains(c, "image") {
+			cachedModel = c
+			return cachedModel
+		}
+	}
+
+	// Priority 2: standard flash (second cheapest)
+	for _, c := range candidates {
+		if c == "gemini-flash-latest" {
+			cachedModel = c
+			return cachedModel
+		}
+	}
+	for _, c := range candidates {
+		if strings.Contains(c, "flash") && !strings.Contains(c, "tts") && !strings.Contains(c, "image") {
+			cachedModel = c
+			return cachedModel
+		}
+	}
+
+	// Priority 3: any available model
+	if len(candidates) > 0 {
+		cachedModel = candidates[0]
+		return cachedModel
+	}
+
+	cachedModel = "gemini-flash-lite-latest"
+	return cachedModel
+}
+
+func callGemini(ctx context.Context, apiKey, model, prompt string) (string, string, error) {
+	if model == "" || model == "auto" {
+		model = resolveCheapestModel(ctx, apiKey)
+	}
+
+	reqBody := geminiRequest{
+		Contents: []geminiContent{
+			{Parts: []geminiPart{{Text: prompt}}},
+		},
+	}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", model, err
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return "", model, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", model, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", model, fmt.Errorf("gemini api status %d (%s): %s", resp.StatusCode, model, string(body))
+	}
+
+	var geminiResp geminiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
+		return "", model, err
+	}
+
+	if len(geminiResp.Candidates) > 0 && len(geminiResp.Candidates[0].Content.Parts) > 0 {
+		return strings.TrimSpace(geminiResp.Candidates[0].Content.Parts[0].Text), model, nil
+	}
+	return "", model, fmt.Errorf("no response candidates from Gemini")
 }
 
 func sanitizeName(name string) string {

@@ -7,6 +7,7 @@
 BINARY_NAME        ?= velora-operator
 IMG                ?= ghcr.io/yashasbn/velora-operator:latest
 DAG_TRIGGER_IMG    ?= ghcr.io/yashasbn/velora-dag-trigger:latest
+SUMMARIZER_IMG     ?= ghcr.io/yashasbn/velora-summarizer:latest
 CONTROLLER_GEN     ?= $(shell which controller-gen 2>/dev/null || echo "go run sigs.k8s.io/controller-tools/cmd/controller-gen")
 ENVTEST            ?= $(shell which setup-envtest 2>/dev/null || echo "go run sigs.k8s.io/controller-runtime/tools/setup-envtest")
 GOBIN              ?= $(shell go env GOBIN)
@@ -43,7 +44,7 @@ run: generate fmt vet
 # Docker
 # ---------------------------------------------------------------------------
 .PHONY: docker-build
-docker-build: docker-build-operator docker-build-trigger
+docker-build: docker-build-operator docker-build-trigger docker-build-summarizer
 
 .PHONY: docker-build-operator
 docker-build-operator:
@@ -53,10 +54,15 @@ docker-build-operator:
 docker-build-trigger:
 	docker build -t $(DAG_TRIGGER_IMG) -f Dockerfile.dag-trigger .
 
+.PHONY: docker-build-summarizer
+docker-build-summarizer:
+	docker build -t $(SUMMARIZER_IMG) -f Dockerfile.summarizer .
+
 .PHONY: docker-push
 docker-push:
 	docker push $(IMG)
 	docker push $(DAG_TRIGGER_IMG)
+	docker push $(SUMMARIZER_IMG)
 
 # ---------------------------------------------------------------------------
 # Code generation
