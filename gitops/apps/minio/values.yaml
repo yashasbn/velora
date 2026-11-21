@@ -16,7 +16,7 @@ image:
   pullPolicy: IfNotPresent
 
 mcImage:
-  repository: cgr.dev/chainguard/minio-client
+  repository: pgsty/mc
   tag: latest
   pullPolicy: IfNotPresent
 

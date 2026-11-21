@@ -37,7 +37,7 @@ IMAGES=(
 
   # MinIO storage
   "cgr.dev/chainguard/minio:latest"
-  "cgr.dev/chainguard/minio-client:latest"
+  "pgsty/mc:latest"
 
   # Airflow & Database
   "apache/airflow:2.9.3"
