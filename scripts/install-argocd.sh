@@ -85,18 +85,13 @@ else
 fi
 
 # Credentials & Access Info
-info "Gathering access credentials..."
-ARGOCD_PASSWORD=$(kubectl get secret argocd-initial-admin-secret \
-  -n "$ARGOCD_NAMESPACE" \
-  -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo "<run: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d>")
-
 echo ""
 echo -e "${GREEN}================================================================${NC}"
 echo -e "${GREEN}  Velora — ArgoCD Installation Complete!${NC}"
 echo -e "${GREEN}================================================================${NC}"
 echo ""
 echo "  ArgoCD UI:        http://localhost:30080"
-echo "  ArgoCD login:     admin / ${ARGOCD_PASSWORD}"
+echo "  ArgoCD login:     admin / admin"
 echo ""
 echo "  Or use port-forward:"
 echo "    ./scripts/port-forward.sh argocd"

@@ -76,3 +76,7 @@ configs:
     resource.customizations.ignoreDifferences.all: |
       managedFieldsManagers:
         - kube-controller-manager
+  secret:
+    # Predefined admin password for local dev (bcrypt hash of "admin")
+    argocdServerAdminPassword: "$2a$12$CQv7g2ACUh70esatN.5xiugD4Hjap3rhVgTja1FzeA.u3GGY7rMTi"
+    argocdServerAdminPasswordMtime: "2026-01-01T00:00:00Z"

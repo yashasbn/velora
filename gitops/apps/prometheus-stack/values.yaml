@@ -11,7 +11,7 @@ prometheusOperator:
 
 grafana:
   enabled: true
-  adminPassword: velora-grafana-admin   # Override in prod via Secret
+  adminPassword: admin   # Predefined admin password for local dev
 
   service:
     type: NodePort

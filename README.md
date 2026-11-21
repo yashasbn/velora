@@ -195,15 +195,10 @@ Once running, access services from your Windows browser:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| **ArgoCD** | [http://localhost:30080](http://localhost:30080) | `admin` / see below |
-| **Airflow** | [http://localhost:30081](http://localhost:30081) | default |
+| **ArgoCD** | [http://localhost:30080](http://localhost:30080) | `admin` / `admin` |
+| **Airflow** | [http://localhost:30081](http://localhost:30081) | `admin` / `admin` |
+| **Grafana** | [http://localhost:30300](http://localhost:30300) | `admin` / `admin` |
 | **MinIO Console** | [http://localhost:30090](http://localhost:30090) | `velora` / `velora-minio-secret` |
-| **Grafana** | [http://localhost:30300](http://localhost:30300) | default |
-
-**Get ArgoCD admin password:**
-```bash
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
-```
 
 ### 3. Build & Deploy the Operator (Phase 2)
 
