@@ -200,7 +200,7 @@ Once running, access services from your Windows browser:
 | **Grafana** | [http://localhost:30300](http://localhost:30300) | `admin` / `admin` |
 | **MinIO Console** | [http://localhost:30090](http://localhost:30090) | `velora` / `velora-minio-secret` |
 
-### 3. Build & Deploy the Operator (Phase 2)
+### 3. Build & Deploy the Operator (Phase 3)
 
 The Velora Operator is custom-built and not pushed to a public registry. Build and load it into kind:
 
@@ -211,6 +211,13 @@ kind load docker-image ghcr.io/yashasbn/velora-operator:latest --name velora
 ```
 
 Once loaded, ArgoCD will automatically detect the image and start the `velora-operator` deployment.
+
+To deploy sample pipelines and verify the Operator:
+```bash
+cd /mnt/c/Projects/velora
+kubectl apply -f pipelines/
+./scripts/verify-phase.sh 3
+```
 
 ---
 
