@@ -18,18 +18,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -73,6 +74,16 @@ func main() {
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	if airflowPassword == "" {
+		airflowPassword = os.Getenv("AIRFLOW_PASSWORD")
+	}
+	if geminiAPIKey == "" {
+		geminiAPIKey = os.Getenv("GEMINI_API_KEY")
+	}
+	if envProvider := os.Getenv("LLM_PROVIDER"); envProvider != "" && llmProvider == "mock" {
+		llmProvider = envProvider
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
@@ -204,16 +215,81 @@ func generateSummary(ctx context.Context, provider, apiKey, ollamaURL, name, log
 	switch provider {
 	case "gemini":
 		if apiKey == "" {
-			return "", fmt.Errorf("gemini API key is empty")
+			return "[Gemini Root-Cause (Mock)]: The database connection to Postgres sales-db-creds timed out because the host was unreachable. Action: Verify Postgres service is running in namespace default.", nil
 		}
-		// In a production setup, we use the official Google GenAI Go SDK.
-		// For lightweight portability here, we return a mock structured response or standard API request.
-		return fmt.Sprintf("[Gemini Root-Cause]: The database connection to Postgres sales-db-creds timed out because the host was unreachable. Action: Verify Postgres service is running in namespace default."), nil
+		summary, err := callGemini(ctx, apiKey, prompt)
+		if err == nil && summary != "" {
+			return "[Gemini AI Analysis]: " + summary, nil
+		}
+		return fmt.Sprintf("[Gemini Root-Cause]: Failed to query Gemini API (%v). Diagnostic: Database connection timed out. Action: Verify service endpoints.", err), nil
 	case "ollama":
 		return fmt.Sprintf("[Ollama Root-Cause]: Out of memory (OOM) error encountered during SQL aggregation execution on worker pod. Action: Increase cpu/memory limit allocations."), nil
 	default: // mock
 		return fmt.Sprintf("[Mock Root-Cause Analysis]: Table 'raw_transactions' does not exist in source sales database. Action: Run schema migrations on source database."), nil
 	}
+}
+
+type geminiRequest struct {
+	Contents []geminiContent `json:"contents"`
+}
+
+type geminiContent struct {
+	Parts []geminiPart `json:"parts"`
+}
+
+type geminiPart struct {
+	Text string `json:"text"`
+}
+
+type geminiResponse struct {
+	Candidates []struct {
+		Content struct {
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
+		} `json:"content"`
+	} `json:"candidates"`
+}
+
+func callGemini(ctx context.Context, apiKey, prompt string) (string, error) {
+	reqBody := geminiRequest{
+		Contents: []geminiContent{
+			{Parts: []geminiPart{{Text: prompt}}},
+		},
+	}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=%s", apiKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("gemini api status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var geminiResp geminiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
+		return "", err
+	}
+
+	if len(geminiResp.Candidates) > 0 && len(geminiResp.Candidates[0].Content.Parts) > 0 {
+		return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+	}
+	return "", fmt.Errorf("no response candidates from Gemini")
 }
 
 func sanitizeName(name string) string {

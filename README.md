@@ -219,6 +219,21 @@ kubectl apply -f pipelines/
 ./scripts/verify-phase.sh 3
 ```
 
+### 4. Deploy the AI Failure Summarizer (Phase 5)
+
+Build and load the summarizer service into kind:
+
+```bash
+cd /mnt/c/Projects/velora/operator
+kind load docker-image ghcr.io/yashasbn/velora-summarizer:latest --name velora
+```
+
+Verify Phase 5:
+```bash
+cd /mnt/c/Projects/velora
+./scripts/verify-phase.sh 5
+```
+
 ---
 
 ## Cluster Recovery
