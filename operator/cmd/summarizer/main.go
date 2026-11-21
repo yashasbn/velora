@@ -27,6 +27,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -70,7 +72,7 @@ func main() {
 	flag.DurationVar(&pollInterval, "poll-interval", 15*time.Second, "How often to scan for failed pipelines.")
 	flag.StringVar(&llmProvider, "llm-provider", "mock", "LLM provider: 'gemini', 'ollama', or 'mock'")
 	flag.StringVar(&geminiAPIKey, "gemini-api-key", "", "API key for Google Gemini")
-	flag.StringVar(&geminiModel, "gemini-model", "gemini-2.5-flash", "Gemini model to use.")
+	flag.StringVar(&geminiModel, "gemini-model", "auto", "Gemini model to use ('auto' selects the cheapest available model for the API key).")
 	flag.StringVar(&ollamaEndpoint, "ollama-endpoint", "http://localhost:11434", "Endpoint for local Ollama")
 
 	opts := zap.Options{Development: true}
@@ -223,9 +225,9 @@ func generateSummary(ctx context.Context, provider, apiKey, model, ollamaURL, na
 		if apiKey == "" {
 			return "[Gemini Root-Cause (Mock)]: The database connection to Postgres sales-db-creds timed out because the host was unreachable. Action: Verify Postgres service is running in namespace default.", nil
 		}
-		summary, err := callGemini(ctx, apiKey, model, prompt)
+		summary, usedModel, err := callGemini(ctx, apiKey, model, prompt)
 		if err == nil && summary != "" {
-			return "[Gemini AI Analysis]: " + summary, nil
+			return fmt.Sprintf("[Gemini AI Analysis (%s)]: %s", usedModel, summary), nil
 		}
 		return fmt.Sprintf("[Gemini Root-Cause]: Failed to query Gemini API (%v). Diagnostic: Database connection timed out. Action: Verify service endpoints.", err), nil
 	case "ollama":
@@ -257,7 +259,100 @@ type geminiResponse struct {
 	} `json:"candidates"`
 }
 
-func callGemini(ctx context.Context, apiKey, model, prompt string) (string, error) {
+var (
+	cachedModel     string
+	cachedModelLock sync.Mutex
+)
+
+type listModelsResponse struct {
+	Models []struct {
+		Name                       string   `json:"name"`
+		SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+	} `json:"models"`
+}
+
+// resolveCheapestModel queries the Gemini ListModels endpoint for the given API key,
+// filters for models supporting generateContent, and picks the most cost-effective tier.
+func resolveCheapestModel(ctx context.Context, apiKey string) string {
+	cachedModelLock.Lock()
+	defer cachedModelLock.Unlock()
+
+	if cachedModel != "" {
+		return cachedModel
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models?key=%s", apiKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "gemini-flash-lite-latest"
+	}
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return "gemini-flash-lite-latest"
+	}
+	defer resp.Body.Close()
+
+	var listResp listModelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return "gemini-flash-lite-latest"
+	}
+
+	var candidates []string
+	for _, m := range listResp.Models {
+		for _, method := range m.SupportedGenerationMethods {
+			if method == "generateContent" {
+				name := strings.TrimPrefix(m.Name, "models/")
+				candidates = append(candidates, name)
+				break
+			}
+		}
+	}
+
+	// Priority 1: flash-lite (cheapest tier)
+	for _, c := range candidates {
+		if c == "gemini-flash-lite-latest" {
+			cachedModel = c
+			return cachedModel
+		}
+	}
+	for _, c := range candidates {
+		if strings.Contains(c, "flash-lite") && !strings.Contains(c, "tts") && !strings.Contains(c, "image") {
+			cachedModel = c
+			return cachedModel
+		}
+	}
+
+	// Priority 2: standard flash (second cheapest)
+	for _, c := range candidates {
+		if c == "gemini-flash-latest" {
+			cachedModel = c
+			return cachedModel
+		}
+	}
+	for _, c := range candidates {
+		if strings.Contains(c, "flash") && !strings.Contains(c, "tts") && !strings.Contains(c, "image") {
+			cachedModel = c
+			return cachedModel
+		}
+	}
+
+	// Priority 3: any available model
+	if len(candidates) > 0 {
+		cachedModel = candidates[0]
+		return cachedModel
+	}
+
+	cachedModel = "gemini-flash-lite-latest"
+	return cachedModel
+}
+
+func callGemini(ctx context.Context, apiKey, model, prompt string) (string, string, error) {
+	if model == "" || model == "auto" {
+		model = resolveCheapestModel(ctx, apiKey)
+	}
+
 	reqBody := geminiRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
@@ -265,40 +360,37 @@ func callGemini(ctx context.Context, apiKey, model, prompt string) (string, erro
 	}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", err
+		return "", model, err
 	}
 
-	if model == "" {
-		model = "gemini-2.5-flash"
-	}
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
-		return "", err
+		return "", model, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", model, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("gemini api status %d: %s", resp.StatusCode, string(body))
+		return "", model, fmt.Errorf("gemini api status %d (%s): %s", resp.StatusCode, model, string(body))
 	}
 
 	var geminiResp geminiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return "", err
+		return "", model, err
 	}
 
 	if len(geminiResp.Candidates) > 0 && len(geminiResp.Candidates[0].Content.Parts) > 0 {
-		return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+		return strings.TrimSpace(geminiResp.Candidates[0].Content.Parts[0].Text), model, nil
 	}
-	return "", fmt.Errorf("no response candidates from Gemini")
+	return "", model, fmt.Errorf("no response candidates from Gemini")
 }
 
 func sanitizeName(name string) string {
