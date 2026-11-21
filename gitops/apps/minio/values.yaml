@@ -15,6 +15,11 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+mcImage:
+  repository: cgr.dev/chainguard/minio-client
+  tag: latest
+  pullPolicy: IfNotPresent
+
 rootUser: velora
 rootPassword: velora-minio-secret   # Override via Secret in production
 
