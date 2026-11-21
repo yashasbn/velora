@@ -60,6 +60,7 @@ func main() {
 		pollInterval    time.Duration
 		llmProvider     string // "gemini", "ollama", or "mock"
 		geminiAPIKey    string
+		geminiModel     string
 		ollamaEndpoint  string
 	)
 
@@ -69,6 +70,7 @@ func main() {
 	flag.DurationVar(&pollInterval, "poll-interval", 15*time.Second, "How often to scan for failed pipelines.")
 	flag.StringVar(&llmProvider, "llm-provider", "mock", "LLM provider: 'gemini', 'ollama', or 'mock'")
 	flag.StringVar(&geminiAPIKey, "gemini-api-key", "", "API key for Google Gemini")
+	flag.StringVar(&geminiModel, "gemini-model", "gemini-2.5-flash", "Gemini model to use.")
 	flag.StringVar(&ollamaEndpoint, "ollama-endpoint", "http://localhost:11434", "Endpoint for local Ollama")
 
 	opts := zap.Options{Development: true}
@@ -80,6 +82,9 @@ func main() {
 	}
 	if geminiAPIKey == "" {
 		geminiAPIKey = os.Getenv("GEMINI_API_KEY")
+	}
+	if envModel := os.Getenv("GEMINI_MODEL"); envModel != "" {
+		geminiModel = envModel
 	}
 	if envProvider := os.Getenv("LLM_PROVIDER"); envProvider != "" && llmProvider == "mock" {
 		llmProvider = envProvider
@@ -130,7 +135,7 @@ func main() {
 			setupLog.Info("Shutting down Failure Summarizer")
 			return
 		case <-ticker.C:
-			if err := runScan(ctx, k8sClient, airflowClient, llmProvider, geminiAPIKey, ollamaEndpoint); err != nil {
+			if err := runScan(ctx, k8sClient, airflowClient, llmProvider, geminiAPIKey, geminiModel, ollamaEndpoint); err != nil {
 				setupLog.Error(err, "Error scanning pipelines")
 			}
 		}
@@ -145,6 +150,7 @@ func runScan(
 	airflowClient airflow.Client,
 	provider string,
 	apiKey string,
+	model string,
 	ollamaURL string,
 ) error {
 	logger := log.FromContext(ctx).WithName("scanner")
@@ -172,7 +178,7 @@ func runScan(
 
 		// 2. Query LLM to generate summary
 		logger.Info("Generating root-cause summary via AI...", "provider", provider)
-		summary, err := generateSummary(ctx, provider, apiKey, ollamaURL, dp.Name, logs)
+		summary, err := generateSummary(ctx, provider, apiKey, model, ollamaURL, dp.Name, logs)
 		if err != nil {
 			logger.Error(err, "Failed to generate AI summary")
 			summary = fmt.Sprintf("AI Summarizer Error: Failed to generate root cause analysis (%v)", err)
@@ -209,7 +215,7 @@ func fetchFailedLogs(ctx context.Context, airflowClient airflow.Client, pipeline
 }
 
 // generateSummary calls the specified LLM provider with the logs context.
-func generateSummary(ctx context.Context, provider, apiKey, ollamaURL, name, logs string) (string, error) {
+func generateSummary(ctx context.Context, provider, apiKey, model, ollamaURL, name, logs string) (string, error) {
 	prompt := fmt.Sprintf("Analyze these logs for data pipeline '%s' and summarize the root cause of the failure in 1-2 plain English sentences. Do not show code tracebacks or details, keep it brief and actionable.\n\nLogs:\n%s", name, logs)
 
 	switch provider {
@@ -217,7 +223,7 @@ func generateSummary(ctx context.Context, provider, apiKey, ollamaURL, name, log
 		if apiKey == "" {
 			return "[Gemini Root-Cause (Mock)]: The database connection to Postgres sales-db-creds timed out because the host was unreachable. Action: Verify Postgres service is running in namespace default.", nil
 		}
-		summary, err := callGemini(ctx, apiKey, prompt)
+		summary, err := callGemini(ctx, apiKey, model, prompt)
 		if err == nil && summary != "" {
 			return "[Gemini AI Analysis]: " + summary, nil
 		}
@@ -251,7 +257,7 @@ type geminiResponse struct {
 	} `json:"candidates"`
 }
 
-func callGemini(ctx context.Context, apiKey, prompt string) (string, error) {
+func callGemini(ctx context.Context, apiKey, model, prompt string) (string, error) {
 	reqBody := geminiRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
@@ -262,7 +268,10 @@ func callGemini(ctx context.Context, apiKey, prompt string) (string, error) {
 		return "", err
 	}
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=%s", apiKey)
+	if model == "" {
+		model = "gemini-2.5-flash"
+	}
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
 		return "", err
