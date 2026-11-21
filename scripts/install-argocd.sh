@@ -49,6 +49,11 @@ fi
 kubectl apply -f "$REPO_ROOT/gitops/argocd/install/namespace.yaml"
 kubectl apply -f "$REPO_ROOT/gitops/argocd/install/repo-secret.yaml"
 
+# Pre-apply monitoring TLS secret and Grafana dashboard ConfigMap
+kubectl create namespace monitoring 2>/dev/null || true
+kubectl apply -f "$REPO_ROOT/gitops/apps/prometheus-stack/admission-secret.yaml" 2>/dev/null || true
+kubectl apply -f "$REPO_ROOT/gitops/apps/prometheus-stack/grafana-dashboard.yaml" 2>/dev/null || true
+
 MAX_HELM_ATTEMPTS=3
 for attempt in $(seq 1 $MAX_HELM_ATTEMPTS); do
   info "  Helm install attempt ${attempt}/${MAX_HELM_ATTEMPTS}..."
